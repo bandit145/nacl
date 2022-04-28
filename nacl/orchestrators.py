@@ -4,16 +4,19 @@ import docker
 class Docker:
 
     __conf_schema__ = {
-        "detached": True,
+        "detach": True,
         "auto_remove": True,
         "command": {"type": str, "required": False},
-        "cap_add": {"type": list[str], "required": False},
-        "environment": {"type": list[str], "required": False},
+        "cap_add": {"type": list, "required": False},
+        "environment": {"type": list, "required": False},
         "dns_search": {"type": str, "required": False},
         "extra_hosts": {"type": dict, "required": False},
         "volumes": {"type": list, "required": False},
         "privileged": {"type": bool, "required": False},
         "ports": {"type": dict, "required": False},
+        "networks": {"type": list, "required": False},
+        "name": {"type": str, "required": True},
+        "image": {"type": str, "required": True},
     }
 
     def __init__(self, config: dict) -> None:
@@ -49,9 +52,12 @@ class Docker:
         print("> Starting instances")
         for instance in self.config["instances"]:
             print(f'==> Starting instance {instance["name"]}')
-            self.state["containers"].append(
-                self.client.containers.run(instance["image"], **instance)
-            )
+            cont_dict = {
+                k: v for (k, v) in instance.items() if k != "networks" and k != "name"
+            }
+            cont_dict["name"] = cont_dict["prov_name"]
+            del cont_dict["prov_name"]
+            self.state["containers"].append(self.client.containers.run(**cont_dict))
 
     def orchestrate(self) -> None:
         self.__pull_images__()

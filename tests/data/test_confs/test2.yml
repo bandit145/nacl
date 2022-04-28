@@ -1,0 +1,11 @@
+---
+
+provider: docker
+formula: nacl-test
+
+instances:
+  - name: box1
+    image: docker.io/library/alpine:latest
+
+  - name: box2
+    image: docker.io/library/alpine:latest

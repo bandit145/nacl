@@ -5,6 +5,7 @@ SCHEMA = {
     "provider": {"required": True, "type": str},
     "instances": {"required": True, "type": list},
     "formula": {"required": True, "type": str},
+    "scenario": {"required": True, "type": str}
 }
 
 # bad validator that is not generic but whatever. Brain no worky today.

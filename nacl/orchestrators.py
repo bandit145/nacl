@@ -5,7 +5,7 @@ class Docker:
 
     __conf_schema__ = {
         "detach": True,
-        "auto_remove": True,
+        "auto_remove": False,
         "command": {"type": str, "required": False},
         "cap_add": {"type": list, "required": False},
         "environment": {"type": list, "required": False},
@@ -22,7 +22,6 @@ class Docker:
     def __init__(self, config: dict) -> None:
         self.config = config
         self.client = docker.from_env()
-        self.state = {"containers": [], "networks": []}  # type: dict
 
     def __pull_images__(self) -> None:
         print("> Pulling container images")
@@ -36,6 +35,7 @@ class Docker:
     def __create_networks__(self) -> None:
         cur_networks = [x.name for x in self.client.networks.list()]
         required_networks = []
+        # Do not modify config here, fix this
         for instance in self.config["instances"]:
             for net in instance["networks"]:
                 net["name"] = f'nacl_{self.config["formula"]}_{net["name"]}'
@@ -44,9 +44,10 @@ class Docker:
         if len(required_networks) > 0:
             print(f'> Creating required networks nacl_{net["name"]}')
         for net in required_networks:
-            if net["name"] not in self.state["networks"]:
+            if net["name"] not in [x.name for x in self.client.networks.list()]:
                 print(f'==> Creating network {net["name"]}')
-                self.state["networks"].append(self.client.networks.create(**net).name)
+                print({**net, **{"labels":{f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}})
+                self.client.networks.create(**{**net, **{"labels":{f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}})
 
     def __start_containers__(self):
         print("> Starting instances")
@@ -57,7 +58,7 @@ class Docker:
             }
             cont_dict["name"] = cont_dict["prov_name"]
             del cont_dict["prov_name"]
-            self.state["containers"].append(self.client.containers.run(**cont_dict))
+            self.client.containers.run(**{**cont_dict, **{"labels": {f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}})
 
     def orchestrate(self) -> None:
         self.__pull_images__()
@@ -65,7 +66,11 @@ class Docker:
         self.__start_containers__()
 
     def cleanup(self) -> None:
-        pass
+        for cont in self.client.containers.list(filters={"label": f"nacl_formula_{self.config['formula']}=nacl_scenario_{self.config['scenario']}"}):
+            cont.remove(force=True)
+
+        for net in self.client.networks.list(filters={"label": f"nacl_formula_{self.config['formula']}=nacl_scenario_{self.config['scenario']}"}):
+            self.client.networks.remove()
 
 
 class Vagrant:

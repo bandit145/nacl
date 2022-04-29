@@ -32,8 +32,6 @@ def test_docker_create_network() -> None:
         in nets
     )
     assert len(nets) == 2
-    # ensure internal state is updated
-    assert len(orch.state["networks"]) == 2
 
 
 def test_docker_start_containers() -> None:
@@ -41,7 +39,7 @@ def test_docker_start_containers() -> None:
     orch = Docker(copy.deepcopy(test_conf))
     orch.__pull_images__()
     orch.__start_containers__()
-    conts = [x.name for x in orch.state["containers"]]
-    assert len(orch.state["containers"]) == 2
+    conts = [x.name for x in orch.client.containers.list(all=True, filters={"label": f"nacl_formula_{test_conf['formula']}=nacl_scenario_{test_conf['scenario']}"})]
+    assert len(conts) == 2
     assert f'nacl_{test_conf["formula"]}_{test_conf["instances"][0]["name"]}' in conts
     assert f'nacl_{test_conf["formula"]}_{test_conf["instances"][1]["name"]}' in conts

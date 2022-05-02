@@ -1,0 +1,28 @@
+---
+
+provider: docker
+formula: nacl-test-dockerfile
+scenario: default_dockerfile
+
+instances:
+  - name: box1
+    image: quay.io/centos/centos:stream8
+    customize: true
+    networks:
+      - name: net1
+      - name: net2
+    tmpfs:
+      '/run': ''
+      '/tmp': ''
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+  # - name: box2
+  #   image: docker.io/library/alpine:latest
+  #   networks:
+  #     - name: net1
+  #   tmpfs:
+  #     '/run': ''
+  #     '/tmp': ''
+  #   volumes:
+  #     - /sys/fs/cgroup:/sys/fs/cgroup:ro

@@ -29,19 +29,31 @@ class Docker:
         self.client = docker.from_env()
 
     def __build_custom_image__(self, instance) -> None:
-        if not os.path.exists(f"{self.config['running_tmp_dir']}"):
-            os.makedirs(f"{self.config['running_tmp_dir']}")
+        if not os.path.exists(
+            f"{self.config['running_tmp_dir']}/docker/{self.config['formula']}/{self.config['scenario']}/nacl/"
+        ):
+            os.makedirs(
+                f"{self.config['running_tmp_dir']}/docker/{self.config['formula']}/{self.config['scenario']}/nacl/"
+            )
         new_file = [f"FROM {instance['image']}\n"]
-        with open(f"{self.config['scenario_dir']}/Dockerfile.base", 'r') as dfile:
+        with open(f"Dockerfile.base", "r") as dfile:
             new_file = new_file + dfile.readlines()
-        with open(f"{self.config['running_tmp_dir']}/Dockerfile", 'w') as ndfile:
-            ndfile.write(''.join(new_file))
-        self.client.images.build(path=f"{self.config['running_tmp_dir']}", forcerm=True, rm=True, tag=f"nacl_scenario_{self.config['scenario']}_{instance['name']}:latest")
+        with open(
+            f"{self.config['running_tmp_dir']}/docker/{self.config['formula']}/{self.config['scenario']}/nacl/Dockerfile",
+            "w",
+        ) as ndfile:
+            ndfile.write("".join(new_file))
+        self.client.images.build(
+            path=f"{self.config['running_tmp_dir']}/docker/{self.config['formula']}/{self.config['scenario']}/nacl/",
+            forcerm=True,
+            rm=True,
+            tag=f"nacl_{self.config['formula']}_{self.config['scenario']}_{instance['name']}:latest",
+        )
 
     def __pull_images__(self) -> None:
         print("> Pulling container images")
         for instance in self.config["instances"]:
-            if 'customize' in instance.keys():
+            if "customize" in instance.keys():
                 self.__build_custom_image__(instance)
             else:
                 repo, tag = instance["image"].split(":")
@@ -56,7 +68,9 @@ class Docker:
         # Do not modify config here, fix this
         for instance in self.config["instances"]:
             for net in instance["networks"]:
-                net["name"] = f'nacl_{self.config["formula"]}_{net["name"]}'
+                net[
+                    "name"
+                ] = f'nacl_{self.config["formula"]}_{self.config["scenario"]}_{net["name"]}'
                 if net["name"] not in cur_networks:
                     required_networks.append(net)
         if len(required_networks) > 0:
@@ -64,8 +78,26 @@ class Docker:
         for net in required_networks:
             if net["name"] not in [x.name for x in self.client.networks.list()]:
                 print(f'==> Creating network {net["name"]}')
-                print({**net, **{"labels":{f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}})
-                self.client.networks.create(**{**net, **{"labels":{f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}})
+                print(
+                    {
+                        **net,
+                        **{
+                            "labels": {
+                                f"nacl_{self.config['formula']}": f"nacl_{self.config['scenario']}"
+                            }
+                        },
+                    }
+                )
+                self.client.networks.create(
+                    **{
+                        **net,
+                        **{
+                            "labels": {
+                                f"nacl_{self.config['formula']}": f"nacl_{self.config['scenario']}"
+                            }
+                        },
+                    }
+                )
 
     def __start_containers__(self) -> list[docker.models.containers.Container]:
         containers = []
@@ -73,13 +105,36 @@ class Docker:
         for instance in self.config["instances"]:
             print(f'==> Starting instance {instance["name"]}')
             cont_dict = {
-                k: v for (k, v) in instance.items() if k != "networks" and k != "name" and k != "customize"
+                k: v
+                for (k, v) in instance.items()
+                if k != "networks" and k != "name" and k != "customize"
             }
             cont_dict["name"] = cont_dict["prov_name"]
             del cont_dict["prov_name"]
-            if 'customize' in instance.keys():
-                cont_dict["image"] = f"nacl_scenario_{self.config['scenario']}_{instance['name']}:latest"
-            containers.append(self.client.containers.run(**{**cont_dict, **{"labels": {f"nacl_formula_{self.config['formula']}": f"nacl_scenario_{self.config['scenario']}"}}}))
+            if "volumes" in cont_dict.keys():
+                cont_dict["volumes"].append(
+                    f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
+                )
+            else:
+                cont_dict["volumes"] = [
+                    f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
+                ]
+            if "customize" in instance.keys():
+                cont_dict[
+                    "image"
+                ] = f"nacl_{self.config['formula']}_{self.config['scenario']}_{instance['name']}:latest"
+            containers.append(
+                self.client.containers.run(
+                    **{
+                        **cont_dict,
+                        **{
+                            "labels": {
+                                f"nacl_{self.config['formula']}": f"nacl_{self.config['scenario']}"
+                            }
+                        },
+                    }
+                )
+            )
         return containers
 
     # this will bootstrap an instance with local only minion
@@ -88,10 +143,15 @@ class Docker:
         print("> Bootstrapping instances with Salt")
         for cont in containers:
             print(f"==> Bootstrapping instance {cont.name}")
-            #out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
-            out = cont.exec_run("bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion && systemctl restart salt-minion\"")
+            # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
+            out = cont.exec_run(
+                "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion && systemctl restart salt-minion\""
+            )
             if out.exit_code != 0:
-                print(f"==> Error bootstrapping instance {cont.name}. {out.output}", file=sys.stderr)
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
+                )
                 raise BootStrapException()
 
     def orchestrate(self) -> None:
@@ -99,12 +159,21 @@ class Docker:
         self.__create_networks__()
         containers = self.__start_containers__()
         self.__bootstrap_instances__(containers)
+        return [x.name for x in containers]
 
     def cleanup(self) -> None:
-        for cont in self.client.containers.list(filters={"label": f"nacl_formula_{self.config['formula']}=nacl_scenario_{self.config['scenario']}"}):
+        for cont in self.client.containers.list(
+            filters={
+                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+            }
+        ):
             cont.remove(force=True)
 
-        for net in self.client.networks.list(filters={"label": f"nacl_formula_{self.config['formula']}=nacl_scenario_{self.config['scenario']}"}):
+        for net in self.client.networks.list(
+            filters={
+                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+            }
+        ):
             self.client.networks.remove()
 
 

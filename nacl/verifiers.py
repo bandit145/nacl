@@ -1,3 +1,2 @@
-
 class TestInfra:
-	pass
+    pass

@@ -18,13 +18,13 @@ instances:
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
 
-  # - name: box2
-  #   image: quay.io/centos/centos:stream8
-  #   customize: True
-  #   networks:
-  #     - name: net1
-  #   tmpfs:
-  #     '/run': ''
-  #     '/tmp': ''
-  #   volumes:
-  #     - /sys/fs/cgroup:/sys/fs/cgroup:ro
+  - name: box2
+    image: quay.io/centos/centos:stream8
+    customize: True
+    networks:
+      - name: net1
+    tmpfs:
+      '/run': ''
+      '/tmp': ''
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro

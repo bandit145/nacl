@@ -32,7 +32,7 @@ def test_generate_instance_config() -> None:
     print(ins_conf)
     assert len(ins_conf[0].keys()) == 6
     assert ins_conf[0]["detach"]
-    assert ins_conf[0]["prov_name"] == "nacl_nacl-test_box1"
+    assert ins_conf[0]["prov_name"] == "nacl_nacl-test_default_box1"
     assert len(ins_conf[1].keys()) == 6
     assert ins_conf[1]["detach"]
-    assert ins_conf[1]["prov_name"] == "nacl_nacl-test_box2"
+    assert ins_conf[1]["prov_name"] == "nacl_nacl-test_default_box2"

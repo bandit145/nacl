@@ -3,6 +3,7 @@
 provider: docker
 formula: nacl-test
 scenario: default
+verifier: testinfra
 
 instances:
   - name: box1

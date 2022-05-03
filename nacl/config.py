@@ -1,11 +1,16 @@
 import nacl.orchestrators
+import yaml
 from nacl.exceptions import ConfigException
+import os
+
+TMP_DIR = f'/home/{os.getenv("USER")}/nacl/'
 
 SCHEMA = {
     "provider": {"required": True, "type": str},
     "instances": {"required": True, "type": list},
     "formula": {"required": True, "type": str},
-    "scenario": {"required": True, "type": str}
+    "scenario": {"required": True, "type": str},
+    "verifier": {"required": True, "type": str},
 }
 
 # bad validator that is not generic but whatever. Brain no worky today.
@@ -45,12 +50,20 @@ def generate_instance_config(config: dict) -> list[dict]:
                 new_ins[k] = v
             elif k in instance.keys():
                 new_ins[k] = instance[k]
-        new_ins["prov_name"] = f'nacl_{config["formula"]}_{instance["name"]}'
+        new_ins[
+            "prov_name"
+        ] = f'nacl_{config["formula"]}_{config["scenario"]}_{instance["name"]}'
         new_instance_config.append(new_ins)
     return new_instance_config
 
 
-def parse_config(raw_config: dict):
+def parse_config(raw_config: dict) -> dict:
     validate_config(raw_config)
     raw_config["instances"] = generate_instance_config(raw_config)
+    raw_config["running_tmp_dir"] = TMP_DIR
     return raw_config
+
+
+def get_config() -> dict:
+    with open("nacl.yml", "r") as nacl_conf:
+        return yaml.safe_load(nacl_conf)

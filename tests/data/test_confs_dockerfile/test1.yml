@@ -5,6 +5,12 @@ formula: nacl-test-dockerfile
 scenario: default_dockerfile
 verifier: testinfra
 
+grains:
+  box1:
+    roles:
+      - datacenter
+
+
 instances:
   - name: box1
     image: quay.io/centos/centos:stream8

@@ -11,6 +11,7 @@ SCHEMA = {
     "formula": {"required": True, "type": str},
     "scenario": {"required": True, "type": str},
     "verifier": {"required": True, "type": str},
+    "grains": {"required": False, "type": dict},
 }
 
 # bad validator that is not generic but whatever. Brain no worky today.
@@ -64,6 +65,6 @@ def parse_config(raw_config: dict) -> dict:
     return raw_config
 
 
-def get_config() -> dict:
-    with open("nacl.yml", "r") as nacl_conf:
+def get_config(scenario: str) -> dict:
+    with open(f"{scenario}/nacl.yml", "r") as nacl_conf:
         return yaml.safe_load(nacl_conf)

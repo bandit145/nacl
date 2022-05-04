@@ -5,6 +5,15 @@ formula: nacl-test
 scenario: default
 verifier: testinfra
 
+grains:
+  box1:
+    roles: 
+      - web
+
+  box2:
+    roles:
+      - web
+
 instances:
   - name: box1
     image: docker.io/library/alpine:latest

@@ -2,9 +2,18 @@ import docker
 import sys
 import os
 from nacl.exceptions import BootStrapException
+import yaml
 
 
-class Docker:
+class Orchestrator:
+    def orchestrate(self):
+        pass
+
+    def cleanup(self):
+        pass
+
+
+class Docker(Orchestrator):
 
     __conf_schema__ = {
         "detach": True,
@@ -145,8 +154,29 @@ class Docker:
             print(f"==> Bootstrapping instance {cont.name}")
             # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
             out = cont.exec_run(
-                "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion && systemctl restart salt-minion\""
+                "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\""
             )
+            if out.exit_code != 0:
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
+                )
+                raise BootStrapException()
+            if (
+                "grains" in self.config.keys()
+                and cont.name in self.config["grains"].keys()
+            ):
+                out = cont.exec_run(
+                    "echo $GRAINS > /etc/salt/grains",
+                    env={"GRAINS": yaml.dumps(self.config["grains"][cont.name])},
+                )
+                if out.exit_code != 0:
+                    print(
+                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                        file=sys.stderr,
+                    )
+                    raise BootStrapException()
+            out = cont.exec_run("systemctl restart salt-minion")
             if out.exit_code != 0:
                 print(
                     f"==> Error bootstrapping instance {cont.name}. {out.output}",

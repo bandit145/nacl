@@ -110,7 +110,7 @@ def test_docker_bootstrap() -> None:
     )
     os.chdir("tests/data/test_confs_dockerfile")
     test_conf["running_tmp_dir"] = "/tmp/nacl/"
-    nacl.utils.symlink_srv_dir(
+    nacl.utils.copy_srv_dir(
         test_conf["running_tmp_dir"], test_conf["formula"], os.getcwd()
     )
     orch = Docker(copy.deepcopy(test_conf))
@@ -132,7 +132,7 @@ def test_docker_orchestrate() -> None:
     )
     os.chdir("tests/data/test_confs_dockerfile")
     test_conf["running_tmp_dir"] = "/tmp/nacl/"
-    nacl.utils.symlink_srv_dir(
+    nacl.utils.copy_srv_dir(
         test_conf["running_tmp_dir"], test_conf["formula"], os.getcwd()
     )
     orch = Docker(copy.deepcopy(test_conf))

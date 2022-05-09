@@ -76,12 +76,13 @@ class Docker(Orchestrator):
         required_networks = []
         # Do not modify config here, fix this
         for instance in self.config["instances"]:
-            for net in instance["networks"]:
-                net[
-                    "name"
-                ] = f'nacl_{self.config["formula"]}_{self.config["scenario"]}_{net["name"]}'
-                if net["name"] not in cur_networks:
-                    required_networks.append(net)
+            if 'networks' in instance.keys():
+                for net in instance["networks"]:
+                    net[
+                        "name"
+                    ] = f'nacl_{self.config["formula"]}_{self.config["scenario"]}_{net["name"]}'
+                    if net["name"] not in cur_networks:
+                        required_networks.append(net)
         if len(required_networks) > 0:
             print(f'> Creating required networks nacl_{net["name"]}')
         for net in required_networks:
@@ -162,6 +163,25 @@ class Docker(Orchestrator):
                     file=sys.stderr,
                 )
                 raise BootStrapException()
+
+            out = cont.exec_run(
+                f"bash -o pipefail -c \"echo 'file_roots: [\"/srv/salt/\",\"/srv/formulas/{self.config['formula']}\"]' >> /etc/salt/minion\""
+            )
+            if out.exit_code != 0:
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
+                )
+                raise BootStrapException()
+            out = cont.exec_run(
+                f"bash -o pipefail -c \"mkdir /srv/salt/ && echo 'base: \\n  \\\'*\\\':\\n  - master' >> /srv/salt/top.sls\""
+            )
+            if out.exit_code != 0:
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
+                )
+                raise BootStrapException()
             if (
                 "grains" in self.config.keys()
                 and cont.name in self.config["grains"].keys()
@@ -184,6 +204,32 @@ class Docker(Orchestrator):
                 )
                 raise BootStrapException()
 
+    def converge(self) -> None:
+        print("> Applying state")
+        for cont in  self.client.containers.list(
+            filters={
+                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+            }):
+            print(f"==> Applying state on {cont.name.split('_')[-1]}")
+            cont.exec_run('salt-call --local state.apply')
+
+    def login(self, host: str) -> None:
+        conts = self.client.containers.list(
+            filters={
+                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+            })
+        if len(conts) > 1 and not host:
+            raise NoHostSpecified("You must specify a host for environments with multiple hosts")
+        elif len(conts) == 1:
+            conts[0].exec_run('/bin/bash', tty=True)
+        else:
+            name = [x for x in self.config['instances'] if x.name == host][0]
+            cont = self.client.containers.get(name)
+            cont.exec_run('/bin/bash', tty=True)
+
+    def login(self, cont):
+        pass
+
     def orchestrate(self) -> None:
         self.__pull_images__()
         self.__create_networks__()
@@ -192,11 +238,13 @@ class Docker(Orchestrator):
         return [x.name for x in containers]
 
     def cleanup(self) -> None:
+        print(" > Cleaning up")
         for cont in self.client.containers.list(
             filters={
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
             }
         ):
+            print(f'==> Removing container {cont.name.split("_")[-1]}')
             cont.remove(force=True)
 
         for net in self.client.networks.list(
@@ -204,7 +252,8 @@ class Docker(Orchestrator):
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
             }
         ):
-            self.client.networks.remove()
+            print(f"Removing network {net.name.split('_')[-1]}")
+            net.remove()
 
 
 class Vagrant:

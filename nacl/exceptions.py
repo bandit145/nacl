@@ -4,3 +4,9 @@ class ConfigException(Exception):
 
 class BootStrapException(Exception):
     pass
+
+class ConfigFileNotFound(Exception):
+    pass
+
+class ScenarioExists(Exception):
+    pass

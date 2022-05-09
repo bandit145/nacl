@@ -3,13 +3,15 @@ import nacl.orchestrators
 import nacl.verifiers
 import nacl.config
 import nacl.utils
+import nacl.exceptions
+import sys
 import os
 
 
 def get_orchestrator(orch_name, config) -> nacl.orchestrators.Orchestrator:
     proper_name = list(orch_name)
     proper_name[0] = proper_name[0].upper()
-    return getattr(nacl.orchestraters, "".join(proper_name))(config)
+    return getattr(nacl.orchestrators, "".join(proper_name))(config)
 
 
 def get_verifier(verifier_name) -> nacl.verifiers.Verifier:
@@ -18,11 +20,12 @@ def get_verifier(verifier_name) -> nacl.verifiers.Verifier:
     return getattr(nacl.verifiers, "".join(proper_name))()
 
 
-def create(args: argparse.Namespace, config: dict) -> None:
+def create(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
     orch = get_orchestrator(config["provider"], config)
+    nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
-    return orch.orchestrate()
+    orch.orchestrate()
 
 
 def converge(args: argparse.Namespace, config: dict) -> None:
@@ -51,12 +54,15 @@ def sync(args: argparse.Namespace, config: dict) -> None:
 
 
 def init(args: argparse.Namespace) -> None:
-    if args.scenario:
+    if 'scenario' in args:
         nacl.utils.init_scenario(
             args.path, args.formula, args.driver, args.verifier, args.scenario
         )
+    elif 'state' in args:
+        nacl.utils.init_state(args.state, args.force)
     else:
-        nacl.utils.init_state(args.state)
+        print('[x] you must specifiy scenario or state for init command', file=sys.stderr)
+        sys.exit(1)
 
 
 def test(args: argparse.Namespace, config: dict):
@@ -72,11 +78,16 @@ def parse_args() -> argparse.Namespace:
         description="nacl is a cli tool that helps you test salt stack formulas!"
     )
     subparsers = parser.add_subparsers()
+    #sync parser
+    sync_parser = subparsers.add_parser("sync")
+    sync_parser.add_argument('--sync', help=argparse.SUPPRESS, default=True)
+    sync_parser.add_argument('--scenario', help="Scenario to load config of. Default is default", default="default")
     # test command
     test_parser = subparsers.add_parser("test")
     test_parser.add_argument(
         "-s", "--scenario", help="Scenario to test. If not provided all are run"
     )
+    test_parser.add_argument('--test', help=argparse.SUPPRESS)
     test_parser.add_argument(
         "-p",
         "--parallelsim",
@@ -91,6 +102,7 @@ def parse_args() -> argparse.Namespace:
     )
     # create command
     create_parser = subparsers.add_parser("create")
+    create_parser.add_argument('--create', help=argparse.SUPPRESS)
     create_parser.add_argument(
         "-s",
         "--scenario",
@@ -99,6 +111,7 @@ def parse_args() -> argparse.Namespace:
     )
     # delete command
     delete_parser = subparsers.add_parser("delete")
+    delete_parser.add_argument('--delete', help=argparse.SUPPRESS)
     delete_parser.add_argument(
         "-s",
         "--scenario",
@@ -107,6 +120,7 @@ def parse_args() -> argparse.Namespace:
     )
     # verify
     verify_parser = subparsers.add_parser("verify")
+    verify_parser.add_argument('--verify', help=argparse.SUPPRESS)
     verify_parser.add_argument(
         "-s",
         "--scenario",
@@ -116,9 +130,10 @@ def parse_args() -> argparse.Namespace:
 
     # init
     init_parser = subparsers.add_parser("init")
+    init_parser.add_argument('--init', help=argparse.SUPPRESS)
     init_sub = init_parser.add_subparsers()
     # init formulas sub parser
-    init_scen_parser = init_sub.add_parser("formula")
+    init_scen_parser = init_sub.add_parser("scenario")
     init_scen_parser.add_argument(
         "-d", "--driver", default="docker", help="default driver"
     )
@@ -137,37 +152,45 @@ def parse_args() -> argparse.Namespace:
         default=os.getcwd().split("/")[-1],
         help="formula name if it is different from the repo folder name",
     )
-    init_scen_parser.add_argument("path", help="path to formula to init")
+    init_scen_parser.add_argument("--path", help="path to formula to init", default=None, required=False)
     # init state
     init_state_parser = init_sub.add_parser("state")
     init_state_parser.add_argument(
         "-s", "--state", help="state to create", required=True
     )
+    init_state_parser.add_argument('--force', '-f', help='force init a state', action='store_true', default=False)
     return parser.parse_args()
 
 
 def run() -> None:
     args = parse_args()
     cur_dir = os.getcwd()
-    if "init" in args:
-        init(args)
-    elif "test" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        test(args, config)
-    elif "delete" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        delete(args, config)
-    elif "create" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        create(args, config)
-    elif "converge" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        converge(args, config)
-    elif "verify" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        verify(args, config)
-    elif "sync" in args:
-        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-        sync(args, config)
-    else:
-        pass
+    try:
+        if "init" in args:
+            init(args)
+        elif "test" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            test(args, config)
+        elif "delete" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            delete(args, config)
+        elif "create" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            create(args, cur_dir, config)
+        elif "sync" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
+        elif "converge" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            converge(args, config)
+        elif "verify" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            verify(args, config)
+        elif "sync" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            sync(args, config)
+        else:
+            pass
+    except (nacl.exceptions.ConfigFileNotFound, nacl.exceptions.ScenarioExists) as error:
+        print('[x]', error, file=sys.stderr)
+        sys.exit(1)

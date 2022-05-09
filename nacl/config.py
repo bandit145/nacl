@@ -1,6 +1,6 @@
 import nacl.orchestrators
 import yaml
-from nacl.exceptions import ConfigException
+from nacl.exceptions import ConfigException, ConfigFileNotFound
 import os
 
 TMP_DIR = f'/home/{os.getenv("USER")}/nacl/'
@@ -66,5 +66,8 @@ def parse_config(raw_config: dict) -> dict:
 
 
 def get_config(scenario: str) -> dict:
-    with open(f"{scenario}/nacl.yml", "r") as nacl_conf:
-        return yaml.safe_load(nacl_conf)
+    try:
+        with open(f"nacl/{scenario}/nacl.yml", "r") as nacl_conf:
+            return yaml.safe_load(nacl_conf)
+    except FileNotFoundError:
+        raise ConfigFileNotFound(f"Could not find/read {scenario}/nacl.yml")

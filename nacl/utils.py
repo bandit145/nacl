@@ -1,6 +1,7 @@
 import os
 import shutil
 import nacl.templates
+from nacl.exceptions import ScenarioExists
 
 
 def create_tmp_dir(tmp_dir):
@@ -11,14 +12,16 @@ def create_tmp_dir(tmp_dir):
 def copy_srv_dir(tmp_dir: str, formula: str, formula_path: str) -> None:
     if not os.path.exists(f"/{tmp_dir}/formulas/"):
         os.mkdir(f"/{tmp_dir}/formulas/")
-    if not os.path.exists(f"/{tmp_dir}/formulas/{formula}"):
-        shutil.copytree(formula_path, f"/{tmp_dir}/formulas/{formula}")
+    if os.path.exists(f"/{tmp_dir}/formulas/{formula}"):
+        shutil.rmtree(f"/{tmp_dir}/formulas/{formula}")    
+    shutil.copytree(formula_path, f"/{tmp_dir}/formulas/{formula}")
 
 
-def init_state(state: str):
+def init_state(state: str, force=False):
     if not os.path.exists(state):
         os.mkdir(state)
-        with open(f"{state}/init.sls") as init:
+    if not os.path.exists(f"{state}/init.sls") or force:
+        with open(f"{state}/init.sls", 'w') as init:
             init.write("")
 
 
@@ -32,9 +35,11 @@ def init_scenario(
         with open(f"{path}/nacl/{scenario}/nacl.yml", "w") as nacl_conf:
             nacl_conf.write(
                 nacl.templates.CONFIG.format(
-                    formula=formula, driver=driver, verifier=verifier, scenario=scenario
+                    formula=formula, provider=driver, verifier=verifier, scenario=scenario
                 )
             )
         if driver == "docker":
-            with open(f"{path}/nacl/{scenario}/Dockerfile.base") as d_file:
+            with open(f"{path}/nacl/{scenario}/Dockerfile.base", 'w') as d_file:
                 d_file.write(nacl.templates.DOCKER)
+    else:
+        raise ScenarioExists(f'{scenario} scenario already exists')

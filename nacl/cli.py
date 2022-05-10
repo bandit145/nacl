@@ -28,10 +28,12 @@ def create(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
     orch.orchestrate()
 
 
-def converge(args: argparse.Namespace, config: dict) -> None:
+def converge(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
     orch = get_orchestrator(config["provider"], config)
+    nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
+    orch.orchestrate()
     orch.converge()
 
 
@@ -51,6 +53,10 @@ def verify(args: argparse.Namespace, config: dict) -> None:
 
 def sync(args: argparse.Namespace, config: dict) -> None:
     nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
+
+def login(args: argparse.Namespace, config: dict) -> None:
+    orch = get_orchestrator(config["provider"], config)
+    orch.login(args.host)
 
 
 def init(args: argparse.Namespace) -> None:
@@ -78,6 +84,15 @@ def parse_args() -> argparse.Namespace:
         description="nacl is a cli tool that helps you test salt stack formulas!"
     )
     subparsers = parser.add_subparsers()
+    #converge parser
+    converge_parser = subparsers.add_parser("converge")
+    converge_parser.add_argument('--converge', help=argparse.SUPPRESS)
+    converge_parser.add_argument('--scenario', help='scenario to use fir converge. Default is default', default='default')
+    #login parser
+    login_parser = subparsers.add_parser("login")
+    login_parser.add_argument('--login', help=argparse.SUPPRESS)
+    login_parser.add_argument('--host', help='host to login to', default=None)
+    login_parser.add_argument('--scenario', help='scenario that host belongs to', default='default')
     #sync parser
     sync_parser = subparsers.add_parser("sync")
     sync_parser.add_argument('--sync', help=argparse.SUPPRESS, default=True)
@@ -182,7 +197,10 @@ def run() -> None:
             nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
         elif "converge" in args:
             config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            converge(args, config)
+            converge(args, cur_dir, config)
+        elif "login" in args:
+            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+            login(args, config)
         elif "verify" in args:
             config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
             verify(args, config)

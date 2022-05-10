@@ -1,6 +1,7 @@
 import docker
 import sys
 import os
+import subprocess
 from nacl.exceptions import BootStrapException
 import yaml
 
@@ -113,82 +114,56 @@ class Docker(Orchestrator):
         containers = []
         print("> Starting instances")
         for instance in self.config["instances"]:
-            print(f'==> Starting instance {instance["name"]}')
-            cont_dict = {
-                k: v
-                for (k, v) in instance.items()
-                if k != "networks" and k != "name" and k != "customize"
-            }
-            cont_dict["name"] = cont_dict["prov_name"]
-            del cont_dict["prov_name"]
-            if "volumes" in cont_dict.keys():
-                cont_dict["volumes"].append(
-                    f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
-                )
+            cont = self.client.containers.list(filters=dict(name=instance['prov_name']))
+            if cont != []:
+                print(f'==> Instance {instance["prov_name"]} already created and started')
+                containers.append(cont[0])
             else:
-                cont_dict["volumes"] = [
-                    f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
-                ]
-            if "customize" in instance.keys():
-                cont_dict[
-                    "image"
-                ] = f"nacl_{self.config['formula']}_{self.config['scenario']}_{instance['name']}:latest"
-            containers.append(
-                self.client.containers.run(
-                    **{
-                        **cont_dict,
+                print(f'==> Starting instance {instance["name"]}')
+                cont_dict = {
+                    k: v
+                    for (k, v) in instance.items()
+                    if k != "networks" and k != "name" and k != "customize"
+                }
+                cont_dict["name"] = cont_dict["prov_name"]
+                del cont_dict["prov_name"]
+                if "volumes" in cont_dict.keys():
+                    cont_dict["volumes"].append(
+                        f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
+                    )
+                else:
+                    cont_dict["volumes"] = [
+                        f'{self.config["running_tmp_dir"]}/formulas/:/srv/formulas:z'
+                    ]
+                if "customize" in instance.keys():
+                    cont_dict[
+                        "image"
+                    ] = f"nacl_{self.config['formula']}_{self.config['scenario']}_{instance['name']}:latest"
+                containers.append(
+                    self.client.containers.run(
                         **{
-                            "labels": {
-                                f"nacl_{self.config['formula']}": f"nacl_{self.config['scenario']}"
-                            }
-                        },
-                    }
+                            **cont_dict,
+                            **{
+                                "labels": {
+                                    f"nacl_{self.config['formula']}": f"nacl_{self.config['scenario']}"
+                                }
+                            },
+                        }
+                    )
                 )
-            )
         return containers
 
     # this will bootstrap an instance with local only minion
     # this might change in the future (maybe we create a temp master)
     def __bootstrap_instances__(self, containers):
-        print("> Bootstrapping instances with Salt")
         for cont in containers:
-            print(f"==> Bootstrapping instance {cont.name}")
-            # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
-            out = cont.exec_run(
-                "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\""
-            )
-            if out.exit_code != 0:
-                print(
-                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                    file=sys.stderr,
-                )
-                raise BootStrapException()
-
-            out = cont.exec_run(
-                f"bash -o pipefail -c \"echo 'file_roots: [\"/srv/salt/\",\"/srv/formulas/{self.config['formula']}\"]' >> /etc/salt/minion\""
-            )
-            if out.exit_code != 0:
-                print(
-                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                    file=sys.stderr,
-                )
-                raise BootStrapException()
-            out = cont.exec_run(
-                f"bash -o pipefail -c \"mkdir /srv/salt/ && echo 'base: \\n  \\\'*\\\':\\n  - master' >> /srv/salt/top.sls\""
-            )
-            if out.exit_code != 0:
-                print(
-                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                    file=sys.stderr,
-                )
-                raise BootStrapException()
-            if (
-                "grains" in self.config.keys()
-                and cont.name in self.config["grains"].keys()
-            ):
+            out = cont.exec_run("systemctl status salt-minion")
+            if 'active' not in str(out.output):
+                print("> Bootstrapping instances with Salt")
+                print(f"==> Bootstrapping instance {cont.name}")
+                # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
                 out = cont.exec_run(
-                    "echo $GRAINS > /etc/salt/grains",
-                    env={"GRAINS": yaml.dumps(self.config["grains"][cont.name])},
+                    "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\""
                 )
                 if out.exit_code != 0:
                     print(
@@ -196,13 +171,46 @@ class Docker(Orchestrator):
                         file=sys.stderr,
                     )
                     raise BootStrapException()
-            out = cont.exec_run("systemctl restart salt-minion")
-            if out.exit_code != 0:
-                print(
-                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                    file=sys.stderr,
+
+                out = cont.exec_run(
+                    f"bash -o pipefail -c \"echo 'file_roots:\n  base: [/srv/salt/, /srv/formulas/{self.config['formula']}]' >> /etc/salt/minion\""
                 )
-                raise BootStrapException()
+                if out.exit_code != 0:
+                    print(
+                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                        file=sys.stderr,
+                    )
+                    raise BootStrapException()
+                out = cont.exec_run(
+                    f'bash -o pipefail -c \'mkdir /srv/salt/ && echo "base: \n  \\"*\\":\n    - master" >> /srv/salt/top.sls\''
+                )
+                if out.exit_code != 0:
+                    print(
+                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                        file=sys.stderr,
+                    )
+                    raise BootStrapException()
+                if (
+                    "grains" in self.config.keys()
+                    and cont.name.split('_')[-1] in self.config["grains"].keys()
+                ):
+                    out = cont.exec_run(
+                        "bash -c 'echo \"$GRAINS\" > /etc/salt/grains'",
+                        environment={"GRAINS": yaml.dump(self.config["grains"][cont.name.split('_')[-1]])},
+                    )
+                    if out.exit_code != 0:
+                        print(
+                            f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                            file=sys.stderr,
+                        )
+                        raise BootStrapException()
+                out = cont.exec_run("systemctl restart salt-minion")
+                if out.exit_code != 0:
+                    print(
+                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                        file=sys.stderr,
+                    )
+                    raise BootStrapException()
 
     def converge(self) -> None:
         print("> Applying state")
@@ -211,7 +219,9 @@ class Docker(Orchestrator):
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
             }):
             print(f"==> Applying state on {cont.name.split('_')[-1]}")
-            cont.exec_run('salt-call --local state.apply')
+            out = cont.exec_run('salt-call --local state.apply', stream=True)
+            for line in out.output:
+                print(line.decode())
 
     def login(self, host: str) -> None:
         conts = self.client.containers.list(
@@ -221,14 +231,10 @@ class Docker(Orchestrator):
         if len(conts) > 1 and not host:
             raise NoHostSpecified("You must specify a host for environments with multiple hosts")
         elif len(conts) == 1:
-            conts[0].exec_run('/bin/bash', tty=True)
+            subprocess.run(f'docker exec -it {conts[0].name} /bin/bash', shell=True)
         else:
             name = [x for x in self.config['instances'] if x.name == host][0]
-            cont = self.client.containers.get(name)
-            cont.exec_run('/bin/bash', tty=True)
-
-    def login(self, cont):
-        pass
+            subprocess.run(f'docker exec -it {name} /bin/bash', shell=True)
 
     def orchestrate(self) -> None:
         self.__pull_images__()

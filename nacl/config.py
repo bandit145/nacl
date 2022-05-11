@@ -11,7 +11,7 @@ SCHEMA = {
     "formula": {"required": True, "type": str},
     "scenario": {"required": True, "type": str},
     "verifier": {"required": True, "type": str},
-    "grains": {"required": False, "type": dict},
+    "grains": {"required": False, "type": dict}
 }
 
 # bad validator that is not generic but whatever. Brain no worky today.

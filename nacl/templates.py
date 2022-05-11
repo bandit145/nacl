@@ -21,6 +21,12 @@ instances:
 
 """
 
+TOP_SLS = """
+base:
+  '*':
+    - default
+"""
+
 DOCKER = """
 RUN dnf install -y procps-ng
 

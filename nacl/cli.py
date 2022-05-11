@@ -14,22 +14,20 @@ def get_orchestrator(orch_name, config) -> nacl.orchestrators.Orchestrator:
     return getattr(nacl.orchestrators, "".join(proper_name))(config)
 
 
-def get_verifier(verifier_name) -> nacl.verifiers.Verifier:
-    proper_name = list(orch_name)
+def get_verifier(config: dict, orch) -> nacl.verifiers.Verifier:
+    proper_name = list(config['verifier'])
     proper_name[0] = proper_name[0].upper()
-    return getattr(nacl.verifiers, "".join(proper_name))()
+    return getattr(nacl.verifiers, "".join(proper_name))(config, orch)
 
 
-def create(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
-    orch = get_orchestrator(config["provider"], config)
+def create(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     orch.orchestrate()
 
 
-def converge(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
-    orch = get_orchestrator(config["provider"], config)
+def converge(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
@@ -37,25 +35,21 @@ def converge(args: argparse.Namespace, cur_dir: str, config: dict) -> None:
     orch.converge()
 
 
-def delete(args: argparse.Namespace, config: dict) -> None:
-    orch = get_orchestrator(config["provider"], config)
+def delete(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
-    return orch.cleanup()
+    orch.cleanup()
 
 
-def verify(args: argparse.Namespace, config: dict) -> None:
-    veri = get_verifier(config["verifier"])
-    if not "nacl.yml" in os.listdir():
-        os.chdir(f"nacl/{args.scenario}")
-    veri.verify()
+def verify(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
+    veri = get_verifier(config, orch)
+    veri.run()
 
 
 def sync(args: argparse.Namespace, config: dict) -> None:
     nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
 
-def login(args: argparse.Namespace, config: dict) -> None:
-    orch = get_orchestrator(config["provider"], config)
+def login(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     orch.login(args.host)
 
 
@@ -71,12 +65,13 @@ def init(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def test(args: argparse.Namespace, config: dict):
-    create(args)
-    converge(args)
-    verify(args)
+def test(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
+    delete(args, config, orch)
+    converge(args, cur_dir, config, orch)
+    os.chdir(cur_dir)
+    verify(args, config, orch)
     if args.cleanup:
-        delete(args)
+        delete(args, config, orch)
 
 
 def parse_args() -> argparse.Namespace:
@@ -100,7 +95,7 @@ def parse_args() -> argparse.Namespace:
     # test command
     test_parser = subparsers.add_parser("test")
     test_parser.add_argument(
-        "-s", "--scenario", help="Scenario to test. If not provided all are run"
+        "-s", "--scenario", help="Scenario to test. If not provided default is run", default='default'
     )
     test_parser.add_argument('--test', help=argparse.SUPPRESS)
     test_parser.add_argument(
@@ -181,32 +176,24 @@ def run() -> None:
     args = parse_args()
     cur_dir = os.getcwd()
     try:
+        config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+        orch = get_orchestrator(config["provider"], config)
         if "init" in args:
             init(args)
         elif "test" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            test(args, config)
+            test(args, cur_dir, config, orch)
         elif "delete" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            delete(args, config)
+            delete(args, config, orch)
         elif "create" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            create(args, cur_dir, config)
+            create(args, cur_dir, config, orch)
         elif "sync" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
             nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
         elif "converge" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            converge(args, cur_dir, config)
+            converge(args, cur_dir, config, orch)
         elif "login" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            login(args, config)
+            login(args, config, orch)
         elif "verify" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            verify(args, config)
-        elif "sync" in args:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            sync(args, config)
+            verify(args, config, orch)
         else:
             pass
     except (nacl.exceptions.ConfigFileNotFound, nacl.exceptions.ScenarioExists) as error:

@@ -38,6 +38,11 @@ def init_scenario(
                     formula=formula, provider=driver, verifier=verifier, scenario=scenario
                 )
             )
+        os.mkdir(f"{path}/nacl{scenario}/pillar")
+        with open(f"{path}/nacl/{scenario}/pillar/top.sls", 'w') as pilar_top:
+            pillar_top.write(nacl.templates.TOP_SLS)
+        with open(f"{path}/nacl/{scenario}/default.sls", 'w', default_pillar):
+            default_pillar.write('')
         if driver == "docker":
             with open(f"{path}/nacl/{scenario}/Dockerfile.base", 'w') as d_file:
                 d_file.write(nacl.templates.DOCKER)

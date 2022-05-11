@@ -7,14 +7,24 @@ import yaml
 
 
 class Orchestrator:
+    connecton_type = None
+
     def orchestrate(self):
         pass
 
     def cleanup(self):
         pass
 
+    def get_inventory(self):
+        pass
+
+    def login(self, host):
+        pass
+
 
 class Docker(Orchestrator):
+
+    connection_type = 'docker'
 
     __conf_schema__ = {
         "detach": True,
@@ -71,6 +81,13 @@ class Docker(Orchestrator):
                     tag = "latest"
                 print(f'==> Pulling image {instance["image"]}')
                 self.client.images.pull(repo, tag=tag)
+
+    def get_inventory(self) -> list[str]:
+        return [x.name for x in self.client.containers.list(
+            filters={
+                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+            }
+        )]        
 
     def __create_networks__(self) -> None:
         cur_networks = [x.name for x in self.client.networks.list()]
@@ -173,7 +190,7 @@ class Docker(Orchestrator):
                     raise BootStrapException()
 
                 out = cont.exec_run(
-                    f"bash -o pipefail -c \"echo 'file_roots:\n  base: [/srv/salt/, /srv/formulas/{self.config['formula']}]' >> /etc/salt/minion\""
+                    f"bash -o pipefail -c \"echo 'file_roots:\n  base: [/srv/salt/, /srv/formulas/{self.config['formula']}]\npillar_roots:\n  base: [/srv/formulas/{self.config['formula']}/nacl/{self.config['scenario']}/pillar/]' >> /etc/salt/minion\""
                 )
                 if out.exit_code != 0:
                     print(

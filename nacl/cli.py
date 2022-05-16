@@ -4,6 +4,7 @@ import nacl.verifiers
 import nacl.config
 import nacl.utils
 import nacl.exceptions
+import subprocess
 import sys
 import os
 import re
@@ -27,20 +28,21 @@ def create(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orch
     orch.orchestrate()
 
 
-def converge(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
+def converge(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> str:
     if orch.get_inventory() == []:
         nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     if orch.get_inventory() == []:
         orch.orchestrate()
-    orch.converge()
+    return orch.converge()
 
-def idempotance(orch: nacl.orchestrators.Orchestrator) -> None:
-    print('> Running idempotance check')
+def idempotence(orch: nacl.orchestrators.Orchestrator) -> None:
+    print('> Running idempotence check')
     output = orch.converge()
-    if re.match(r'\(changed=\d*\)', output):
+    if re.findall(r'\(changed=\d*\)', output):
         print('==> Failed idempotance check', file=sys.stderr)
+        orch.cleanup()
         sys.exit(1)
 
 
@@ -61,8 +63,14 @@ def sync(args: argparse.Namespace, config: dict) -> None:
 def login(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     orch.login(args.host)
 
+def lint() -> None:
+    print('> Linting')
+    proc = subprocess.run('salt-lint *', shell=True)
+    if proc.returncode != 0:
+        print('[x] Linting failed', file=sys.stderr)
+        sys.exit(1)
 
-def init(args: argparse.Namespace) -> None:
+def init(args: argparse.Namespace, config: dict) -> None:
     if 'scenario' in args:
         nacl.utils.init_scenario(
             args.path, args.formula, args.driver, args.verifier, args.scenario
@@ -74,14 +82,23 @@ def init(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def test(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
-    delete(args, config, orch)
-    converge(args, cur_dir, config, orch)
-    os.chdir(cur_dir)
-    idempotance(orch)
-    verify(args, config, orch)
-    if args.cleanup:
-        delete(args, config, orch)
+def test(args: argparse.Namespace, cur_dir: str, orch: nacl.orchestrators.Orchestrator) -> None:
+    for scenario in os.listdir('nacl/'):
+        if args.all or args.scenario == scenario:
+            config = nacl.config.parse_config(nacl.config.get_config(scenario))
+            print(f'> Starting Test of scenario {scenario}')
+            delete(args, config, orch)
+            os.chdir(cur_dir)
+            lint()
+            output = converge(args, cur_dir, config, orch)
+            if not re.findall(r'Failed:    0', output):
+                orch.cleanup()
+                sys.exit(1)
+            os.chdir(cur_dir)
+            idempotence(orch)
+            verify(args, config, orch)
+            if args.cleanup:
+                delete(args, config, orch)
 
 
 def parse_args() -> (argparse.Namespace, argparse.ArgumentParser):
@@ -102,6 +119,9 @@ def parse_args() -> (argparse.Namespace, argparse.ArgumentParser):
     sync_parser = subparsers.add_parser("sync")
     sync_parser.add_argument('--sync', help=argparse.SUPPRESS, default=True)
     sync_parser.add_argument('--scenario', help="Scenario to load config of. Default is default", default="default")
+    #lint command
+    lint_parser = subparsers.add_parser("lint")
+    lint_parser.add_argument('--lint', help=argparse.SUPPRESS)
     # test command
     test_parser = subparsers.add_parser("test")
     test_parser.add_argument(
@@ -119,6 +139,13 @@ def parse_args() -> (argparse.Namespace, argparse.ArgumentParser):
         "--cleanup",
         default=True,
         help="Cleanup resources created. By default the is True",
+    )
+    test_parser.add_argument(
+        "-a",
+        "--all",
+        action='store_true',
+        default=False,
+        help="Test all scenarios",
     )
     # create command
     create_parser = subparsers.add_parser("create")
@@ -194,7 +221,7 @@ def run() -> None:
         if "init" in args:
             init(args)
         elif "test" in args:
-            test(args, cur_dir, config, orch)
+            test(args, cur_dir, orch)
         elif "delete" in args:
             delete(args, config, orch)
         elif "create" in args:
@@ -205,6 +232,8 @@ def run() -> None:
             converge(args, cur_dir, config, orch)
         elif "login" in args:
             login(args, config, orch)
+        elif "lint" in args:
+            lint()
         elif "verify" in args:
             verify(args, config, orch)
         else:

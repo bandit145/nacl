@@ -29,7 +29,6 @@ def test_validate_config() -> None:
 
 
 def test_generate_instance_config() -> None:
-    print(os.getcwd())
     test_conf = load_test_config("tests/data/test_confs/test1.yml")
     ins_conf = generate_instance_config(test_conf)
     print(ins_conf)

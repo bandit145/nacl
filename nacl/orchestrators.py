@@ -265,7 +265,7 @@ class Docker(Orchestrator):
         return [x.name for x in containers]
 
     def cleanup(self) -> None:
-        print(" > Cleaning up")
+        print("> Cleaning up")
         for cont in self.client.containers.list(
             filters={
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"

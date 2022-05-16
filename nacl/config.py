@@ -5,6 +5,7 @@ import os
 
 TMP_DIR = f'/home/{os.getenv("USER")}/nacl/'
 
+
 SCHEMA = {
     "provider": {"required": True, "type": str},
     "instances": {"required": True, "type": list},

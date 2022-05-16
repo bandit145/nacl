@@ -5,18 +5,22 @@ import docker
 import yaml
 import copy
 import os
+import pytest
 
 CWD = os.getcwd()
 NO_CLEANUP = os.getenv("NO_INT_TEST_CLEANUP")
 
+@pytest.fixture
+def reset_dir():
+    yield
+    os.chdir(CWD)
 
 def load_test_config(path: str) -> dict:
     with open(path, "r") as config:
         return yaml.safe_load(config)
 
-
-def test_docker_image_pull() -> None:
-    os.chdir(CWD)
+@pytest.fixture(autouse=True)
+def test_docker_image_pull(reset_dir) -> None:
     test_conf = parse_config(load_test_config("tests/data/test_confs/test1.yml"))
     orch = Docker(test_conf)
     orch.__pull_images__()
@@ -24,8 +28,7 @@ def test_docker_image_pull() -> None:
     assert isinstance(image, docker.models.images.Image)
 
 
-def test_docker_create_network() -> None:
-    os.chdir(CWD)
+def test_docker_create_network(reset_dir) -> None:
     test_conf = parse_config(load_test_config("tests/data/test_confs/test1.yml"))
     orch = Docker(copy.deepcopy(test_conf))
     orch.__create_networks__()
@@ -47,9 +50,7 @@ def test_docker_create_network() -> None:
     )
     assert len(nets) == 2
 
-
-def test_docker_start_containers() -> None:
-    os.chdir(CWD)
+def test_docker_start_containers(reset_dir) -> None:
     test_conf = parse_config(load_test_config("tests/data/test_confs/test1.yml"))
     orch = Docker(copy.deepcopy(test_conf))
     orch.__pull_images__()
@@ -84,8 +85,7 @@ def test_docker_start_containers() -> None:
         ]
 
 
-def test_docker_create_image() -> None:
-    os.chdir(CWD)
+def test_docker_create_image(reset_dir) -> None:
     test_conf = parse_config(
         load_test_config("tests/data/test_confs_dockerfile/test1.yml")
     )
@@ -103,8 +103,7 @@ def test_docker_create_image() -> None:
     )
 
 
-def test_docker_bootstrap() -> None:
-    os.chdir(CWD)
+def test_docker_bootstrap(reset_dir) -> None:
     test_conf = parse_config(
         load_test_config("tests/data/test_confs_dockerfile/test1.yml")
     )
@@ -125,8 +124,7 @@ def test_docker_bootstrap() -> None:
         [x.remove(force=True) for x in conts]
 
 
-def test_docker_orchestrate() -> None:
-    os.chdir(CWD)
+def test_docker_orchestrate(reset_dir) -> None:
     test_conf = parse_config(
         load_test_config("tests/data/test_confs_dockerfile/test2.yml")
     )

@@ -6,7 +6,7 @@ import nacl.utils
 import nacl.exceptions
 import sys
 import os
-
+import re
 
 def get_orchestrator(orch_name, config) -> nacl.orchestrators.Orchestrator:
     proper_name = list(orch_name)
@@ -28,11 +28,20 @@ def create(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orch
 
 
 def converge(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
-    nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
+    if orch.get_inventory() == []:
+        nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
-    orch.orchestrate()
+    if orch.get_inventory() == []:
+        orch.orchestrate()
     orch.converge()
+
+def idempotance(orch: nacl.orchestrators.Orchestrator) -> None:
+    print('> Running idempotance check')
+    output = orch.converge()
+    if re.match(r'\(changed=\d*\)', output):
+        print('==> Failed idempotance check', file=sys.stderr)
+        sys.exit(1)
 
 
 def delete(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
@@ -69,12 +78,13 @@ def test(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orches
     delete(args, config, orch)
     converge(args, cur_dir, config, orch)
     os.chdir(cur_dir)
+    idempotance(orch)
     verify(args, config, orch)
     if args.cleanup:
         delete(args, config, orch)
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> (argparse.Namespace, argparse.ArgumentParser):
     parser = argparse.ArgumentParser(
         description="nacl is a cli tool that helps you test salt stack formulas!"
     )
@@ -169,13 +179,16 @@ def parse_args() -> argparse.Namespace:
         "-s", "--state", help="state to create", required=True
     )
     init_state_parser.add_argument('--force', '-f', help='force init a state', action='store_true', default=False)
-    return parser.parse_args()
+    return parser.parse_args(), parser
 
 
 def run() -> None:
-    args = parse_args()
+    args, parser = parse_args()
     cur_dir = os.getcwd()
     try:
+        if 'scenario' not in args:
+            parser.print_help()
+            sys.exit(0)
         config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
         orch = get_orchestrator(config["provider"], config)
         if "init" in args:
@@ -195,7 +208,7 @@ def run() -> None:
         elif "verify" in args:
             verify(args, config, orch)
         else:
-            pass
+            parser.print_help()
     except (nacl.exceptions.ConfigFileNotFound, nacl.exceptions.ScenarioExists) as error:
         print('[x]', error, file=sys.stderr)
         sys.exit(1)

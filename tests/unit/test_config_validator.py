@@ -4,6 +4,7 @@ from nacl.orchestrators import Docker
 import pytest
 import copy
 import yaml
+import os
 
 
 def load_test_config(path: str) -> dict:
@@ -12,6 +13,7 @@ def load_test_config(path: str) -> dict:
 
 
 def test_validate_config() -> None:
+    print(os.getcwd())
     test_conf = load_test_config("tests/data/test_confs/test1.yml")
     validate_config(test_conf)
     broken_confg = copy.deepcopy(test_conf)
@@ -27,6 +29,7 @@ def test_validate_config() -> None:
 
 
 def test_generate_instance_config() -> None:
+    print(os.getcwd())
     test_conf = load_test_config("tests/data/test_confs/test1.yml")
     ins_conf = generate_instance_config(test_conf)
     print(ins_conf)

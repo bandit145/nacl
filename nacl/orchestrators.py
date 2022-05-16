@@ -229,7 +229,8 @@ class Docker(Orchestrator):
                     )
                     raise BootStrapException()
 
-    def converge(self) -> None:
+
+    def converge(self) -> str:
         print("> Applying state")
         for cont in  self.client.containers.list(
             filters={
@@ -237,8 +238,11 @@ class Docker(Orchestrator):
             }):
             print(f"==> Applying state on {cont.name.split('_')[-1]}")
             out = cont.exec_run('salt-call --local state.apply', stream=True)
+            output = ''
             for line in out.output:
+                output += line.decode()
                 print(line.decode())
+        return output
 
     def login(self, host: str) -> None:
         conts = self.client.containers.list(

@@ -177,7 +177,7 @@ class Docker(Orchestrator):
             out = cont.exec_run("systemctl status salt-minion")
             if 'active' not in str(out.output):
                 print("> Bootstrapping instances with Salt")
-                print(f"==> Bootstrapping instance {cont.name}")
+                print(f"==> Bootstrapping instance {cont.name.split('_')[-1]}")
                 # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
                 out = cont.exec_run(
                     "bash -o pipefail -c \"curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\""
@@ -194,7 +194,7 @@ class Docker(Orchestrator):
                 )
                 if out.exit_code != 0:
                     print(
-                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                        f"==> Error bootstrapping instance {cont.name.split('_')[-1]}. {out.output}",
                         file=sys.stderr,
                     )
                     raise BootStrapException()

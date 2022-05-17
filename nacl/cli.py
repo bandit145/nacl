@@ -40,7 +40,7 @@ def converge(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.or
 def idempotence(orch: nacl.orchestrators.Orchestrator) -> None:
     print('> Running idempotence check')
     output = orch.converge()
-    if re.findall(r'\(changed=\d*\)', output):
+    if re.findall(r'\(changed=\d*\)', output) != []:
         print('==> Failed idempotance check', file=sys.stderr)
         orch.cleanup()
         sys.exit(1)
@@ -91,7 +91,7 @@ def test(args: argparse.Namespace, cur_dir: str, orch: nacl.orchestrators.Orches
             os.chdir(cur_dir)
             lint()
             output = converge(args, cur_dir, config, orch)
-            if not re.findall(r'Failed:    0', output):
+            if re.findall(r'Failed:     0', output) == []:
                 orch.cleanup()
                 sys.exit(1)
             os.chdir(cur_dir)

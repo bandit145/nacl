@@ -207,27 +207,28 @@ class Docker(Orchestrator):
                         file=sys.stderr,
                     )
                     raise BootStrapException()
-                if (
-                    "grains" in self.config.keys()
-                    and cont.name.split('_')[-1] in self.config["grains"].keys()
-                ):
-                    out = cont.exec_run(
-                        "bash -c 'echo \"$GRAINS\" > /etc/salt/grains'",
-                        environment={"GRAINS": yaml.dump(self.config["grains"][cont.name.split('_')[-1]])},
+            #these two always run in case you are using a a container that has it running, so grains get applied and picked up
+            if (
+                "grains" in self.config.keys()
+                and cont.name.split('_')[-1] in self.config["grains"].keys()
+            ):
+                out = cont.exec_run(
+                    "bash -c 'echo \"$GRAINS\" > /etc/salt/grains'",
+                    environment={"GRAINS": yaml.dump(self.config["grains"][cont.name.split('_')[-1]])},
+                )
+            if out.exit_code != 0:
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
                     )
-                    if out.exit_code != 0:
-                        print(
-                            f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                            file=sys.stderr,
-                        )
-                        raise BootStrapException()
-                out = cont.exec_run("systemctl restart salt-minion")
-                if out.exit_code != 0:
-                    print(
-                        f"==> Error bootstrapping instance {cont.name}. {out.output}",
-                        file=sys.stderr,
-                    )
-                    raise BootStrapException()
+                raise BootStrapException()
+            out = cont.exec_run("systemctl restart salt-minion")
+            if out.exit_code != 0:
+                print(
+                    f"==> Error bootstrapping instance {cont.name}. {out.output}",
+                    file=sys.stderr,
+                )
+                raise BootStrapException()
 
 
     def converge(self) -> str:

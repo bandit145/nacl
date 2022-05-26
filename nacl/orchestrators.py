@@ -1,13 +1,15 @@
-import docker
-import sys
 import os
 import subprocess
-from nacl.exceptions import BootStrapException
+import sys
+
+import docker
 import yaml
+
+from nacl.exceptions import BootStrapException, NoHostSpecified
 
 
 class Orchestrator:
-    connecton_type = None
+    connection_type = ""
 
     def orchestrate(self):
         pass
@@ -18,13 +20,16 @@ class Orchestrator:
     def get_inventory(self):
         pass
 
+    def converge(self):
+        pass
+
     def login(self, host):
         pass
 
 
 class Docker(Orchestrator):
 
-    connection_type = 'docker'
+    connection_type = "docker"
 
     __conf_schema__ = {
         "detach": True,
@@ -83,18 +88,21 @@ class Docker(Orchestrator):
                 self.client.images.pull(repo, tag=tag)
 
     def get_inventory(self) -> list[str]:
-        return [x.name for x in self.client.containers.list(
-            filters={
-                "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
-            }
-        )]        
+        return [
+            x.name
+            for x in self.client.containers.list(
+                filters={
+                    "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
+                }
+            )
+        ]
 
     def __create_networks__(self) -> None:
         cur_networks = [x.name for x in self.client.networks.list()]
         required_networks = []
         # Do not modify config here, fix this
         for instance in self.config["instances"]:
-            if 'networks' in instance.keys():
+            if "networks" in instance.keys():
                 for net in instance["networks"]:
                     net[
                         "name"
@@ -131,9 +139,11 @@ class Docker(Orchestrator):
         containers = []
         print("> Starting instances")
         for instance in self.config["instances"]:
-            cont = self.client.containers.list(filters=dict(name=instance['prov_name']))
+            cont = self.client.containers.list(filters=dict(name=instance["prov_name"]))
             if cont != []:
-                print(f'==> Instance {instance["prov_name"]} already created and started')
+                print(
+                    f'==> Instance {instance["prov_name"]} already created and started'
+                )
                 containers.append(cont[0])
             else:
                 print(f'==> Starting instance {instance["name"]}')
@@ -175,7 +185,7 @@ class Docker(Orchestrator):
     def __bootstrap_instances__(self, containers):
         for cont in containers:
             out = cont.exec_run("systemctl status salt-minion")
-            if 'active' not in str(out.output):
+            if "active" not in str(out.output):
                 print("> Bootstrapping instances with Salt")
                 print(f"==> Bootstrapping instance {cont.name.split('_')[-1]}")
                 # out = cont.exec_run("bash -c \"set -o pipefail curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion\"")
@@ -207,20 +217,24 @@ class Docker(Orchestrator):
                         file=sys.stderr,
                     )
                     raise BootStrapException()
-            #these two always run in case you are using a a container that has it running, so grains get applied and picked up
+            # these two always run in case you are using a a container that has it running, so grains get applied and picked up
             if (
                 "grains" in self.config.keys()
-                and cont.name.split('_')[-1] in self.config["grains"].keys()
+                and cont.name.split("_")[-1] in self.config["grains"].keys()
             ):
                 out = cont.exec_run(
                     "bash -c 'echo \"$GRAINS\" > /etc/salt/grains'",
-                    environment={"GRAINS": yaml.dump(self.config["grains"][cont.name.split('_')[-1]])},
+                    environment={
+                        "GRAINS": yaml.dump(
+                            self.config["grains"][cont.name.split("_")[-1]]
+                        )
+                    },
                 )
             if out.exit_code != 0:
                 print(
                     f"==> Error bootstrapping instance {cont.name}. {out.output}",
                     file=sys.stderr,
-                    )
+                )
                 raise BootStrapException()
             out = cont.exec_run("systemctl restart salt-minion")
             if out.exit_code != 0:
@@ -230,16 +244,16 @@ class Docker(Orchestrator):
                 )
                 raise BootStrapException()
 
-
     def converge(self) -> str:
         print("> Applying state")
-        for cont in  self.client.containers.list(
+        for cont in self.client.containers.list(
             filters={
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
-            }):
+            }
+        ):
             print(f"==> Applying state on {cont.name.split('_')[-1]}")
-            out = cont.exec_run('salt-call --local state.apply', stream=True)
-            output = ''
+            out = cont.exec_run("salt-call --local state.apply", stream=True)
+            output = ""
             for line in out.output:
                 output += line.decode()
                 print(line.decode())
@@ -249,16 +263,19 @@ class Docker(Orchestrator):
         conts = self.client.containers.list(
             filters={
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
-            })
+            }
+        )
         if len(conts) > 1 and not host:
-            raise NoHostSpecified("You must specify a host for environments with multiple hosts")
+            raise NoHostSpecified(
+                "You must specify a host for environments with multiple hosts"
+            )
         elif len(conts) == 1:
-            subprocess.run(f'docker exec -it {conts[0].name} /bin/bash', shell=True)
+            subprocess.run(f"docker exec -it {conts[0].name} /bin/bash", shell=True)
         else:
-            name = [x for x in self.config['instances'] if x.name == host][0]
-            subprocess.run(f'docker exec -it {name} /bin/bash', shell=True)
+            name = [x for x in self.config["instances"] if x.name == host][0]
+            subprocess.run(f"docker exec -it {name} /bin/bash", shell=True)
 
-    def orchestrate(self) -> None:
+    def orchestrate(self) -> list:
         self.__pull_images__()
         self.__create_networks__()
         containers = self.__start_containers__()
@@ -268,9 +285,10 @@ class Docker(Orchestrator):
     def cleanup(self) -> None:
         print("> Cleaning up")
         for cont in self.client.containers.list(
+            all=True,
             filters={
                 "label": f"nacl_{self.config['formula']}=nacl_{self.config['scenario']}"
-            }
+            },
         ):
             print(f'==> Removing container {cont.name.split("_")[-1]}')
             cont.remove(force=True)

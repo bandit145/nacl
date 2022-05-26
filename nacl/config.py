@@ -1,10 +1,13 @@
-import nacl.orchestrators
-import yaml
-from nacl.exceptions import ConfigException, ConfigFileNotFound
 import os
+
+import yaml
+
+import nacl.orchestrators
+from nacl.exceptions import ConfigException, ConfigFileNotFound
 
 TMP_DIR = f'/home/{os.getenv("USER")}/nacl/'
 
+PHASES = ["delete", "lint", "create", "converge", "idempotence", "verify", "delete"]
 
 SCHEMA = {
     "provider": {"required": True, "type": str},
@@ -12,7 +15,8 @@ SCHEMA = {
     "formula": {"required": True, "type": str},
     "scenario": {"required": True, "type": str},
     "verifier": {"required": True, "type": str},
-    "grains": {"required": False, "type": dict}
+    "grains": {"required": False, "type": dict},
+    "phases": {"required": False, "type": list},
 }
 
 # bad validator that is not generic but whatever. Brain no worky today.
@@ -20,7 +24,7 @@ def validate_config(config: dict, schema=SCHEMA) -> None:
     for k, v in schema.items():
         if v["required"] and k not in config.keys():
             raise ConfigException(f"Missing required key {k}")
-        elif v["type"] != type(config[k]):
+        elif k in config.keys() and v["type"] != type(config[k]):
             raise ConfigException(
                 f"Incorrect type for {k} \"{type(config[k])}\" should be {v['type']}"
             )

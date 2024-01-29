@@ -12,7 +12,7 @@ def create_tmp_dir(tmp_dir):
 
 def copy_srv_dir(tmp_dir: str, formula: str, formula_path: str) -> None:
     if not os.path.exists(f"/{tmp_dir}/formulas/"):
-        os.mkdir(f"/{tmp_dir}/formulas/")
+        os.mkdir(f"/{tmp_dir}/formulas")
     if os.path.exists(f"/{tmp_dir}/formulas/{formula}"):
         shutil.rmtree(f"/{tmp_dir}/formulas/{formula}")
     shutil.copytree(formula_path, f"/{tmp_dir}/formulas/{formula}")

@@ -48,7 +48,9 @@ def converge(
         os.chdir(f"nacl/{config['scenario']}")
     if orch.get_inventory() == []:
         orch.orchestrate()
-    return orch.converge()
+    output = orch.converge()
+    print(output)
+    return output
 
 
 def idempotence(orch: nacl.orchestrators.Orchestrator) -> None:

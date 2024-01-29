@@ -15,7 +15,7 @@ grains:
 
 instances:
   - name: box1
-    image: quay.io/centos/centos:stream8
+    image: quay.io/centos/centos:stream9
     customize: true
     networks:
       - name: net1
@@ -25,9 +25,9 @@ instances:
       '/tmp': ''
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
-
+      - /sys/fs/selinux:/sys/fs/selinux:ro
   - name: box2
-    image: quay.io/centos/centos:stream8
+    image: quay.io/centos/centos:stream9
     customize: True
     networks:
       - name: net1
@@ -36,3 +36,4 @@ instances:
       '/tmp': ''
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /sys/fs/selinux:/sys/fs/selinux:ro

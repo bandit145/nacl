@@ -2,27 +2,30 @@ import os
 import subprocess
 import sys
 
+import vagrant
 import docker
 import yaml
+from abc import ABC, abstractmethod
+from jinja2 import Environment, BaseLoader, select_autoescape
 
 from nacl.exceptions import BootStrapException, NoHostSpecified
 
 
-class Orchestrator:
+class Orchestrator(ABC):
     connection_type = ""
-
+    @abstractmethod
     def orchestrate(self):
         pass
-
+    @abstractmethod
     def cleanup(self):
         pass
-
+    @abstractmethod
     def get_inventory(self):
         pass
-
+    @abstractmethod
     def converge(self):
         pass
-
+    @abstractmethod
     def login(self, host):
         pass
 
@@ -303,25 +306,64 @@ class Docker(Orchestrator):
 
 
 class Vagrant:
+    VAGRANT_FILE = '''\n
+    Vagrant.configure("2") do | config |
+        {% for instance in instances %}
+            config.vm.define "{{ instance.prov_name }}" do |{{ instance.prov_name }}|
+                {{ instance.prov_name }}.vm.box = "{{ instance.box }}"
+                {{ instance.prov_name }}.vm.synced_folder "{{ host_dir }}", "/srv/formulas/{{ formula_name }}"
+                {% if instance.bootstrap %}
+                {{ instance.prov_name }}.vm.provision "shell", inline: "curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion"
+                {% endif %}
+                {{ instance.prov_name }}.vm.provision "shell", inline: "echo 'file_roots:\\n  base: [/srv/salt/, /srv/formulas/{{ formula_name }}]\\npillar_roots:\\n  base: [/srv/formulas/{{ formula_name }}/nacl/{{ scenario_name }}/pillar/]' >> /etc/salt/minion"
+                {{ instance.prov_name }}.vm.provision "shell", inline: "mkdir /srv/salt/ && echo 'base: \\n  \\"*\\":\\n    - {{ formula_name }}' >> /srv/salt/top.sls"
+                {% if "grains" in grains and instance.prov_name | split('_') | last in grains.keys() %}
+                {{ instance.prov_name }}.vm.provision "shell", inline: "echo {{ grains[intance.prov_name | split('_') | last] | to_pretty_yaml }} > /etc/salt/grains"
+                {% endif %}           
+            end
+        {% endfor %}
+    end
+    '''
+    __conf_schema__ = {
+            "box": {"type": str, "required": True},
+            "bootstrap": True
+            }
     def __init__(self, config: dict) -> None:
         self.config = config
+        self.scenario_dir = f"{self.config['running_tmp_dir']}/vagrant/{self.config['formula']}/{self.config['scenario']}/nacl/"
+        self.formula_dir = f"{self.config['running_tmp_dir']}/formulas"
+        self.vagrant = vagrant.Vagrant(self.scenario_dir, quiet_stdout=False, quiet_stderr=False)
 
-    def __generate_vagrant_config__(self) -> dict:
-        return {}
-
-    def orchestrate(self) -> None:
-        pass
-
-    def cleanup(self) -> None:
-        pass
-
-
-class Vmware:
-    def __init__(self, config: dict) -> None:
-        self.config = config
+    def get_inventory(self) -> list[str]:
+        if not os.path.exists(f"{self.scenario_dir}/Vagrantfile"):
+            return []
+        return [x.name for x in self.vagrant.status() if x.state == 'running']
 
     def orchestrate(self) -> None:
-        pass
+        if not os.path.exists(self.scenario_dir):
+            os.makedirs(self.scenario_dir)
+        vagrant_template = Environment(loader=BaseLoader).from_string(Vagrant.VAGRANT_FILE)
+        data = vagrant_template.render(instances=self.config['instances'], formula_name=self.config['formula'], scenario_name=self.config['scenario'], host_dir=self.formula_dir)
+        with open(f"{self.scenario_dir}/Vagrantfile", "w") as vf:
+            vf.write(data)
+        self.vagrant.up()
+    
+    def login(self, host: str) -> None:
+        subprocess.run(f"vagrant ssh nacl_{self.config['formula']}_{self.config['scenario']}_{host}", shell=True, cwd=self.scenario_dir)
 
     def cleanup(self) -> None:
-        pass
+        if not os.path.exists(f"{self.scenario_dir}/Vagrantfile"):
+            return []
+        self.vagrant.destroy()
+
+    def converge(self) -> str:
+        print("> Applying state")
+        for vm in self.config['instances']:
+            print(f"==> Applying state on {vm['prov_name'].split('_')[-1]}")
+            try: 
+                output = self.vagrant.ssh(vm_name=vm['prov_name'], command="sudo salt-call --local state.apply")
+            except subprocess.CalledProcessError as error:
+                output = error.output.decode()
+        return output
+
+

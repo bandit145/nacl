@@ -22,7 +22,6 @@ def load_test_config(path: str) -> dict:
         return yaml.safe_load(config)
 
 
-@pytest.fixture(autouse=True)
 def test_docker_image_pull(reset_dir) -> None:
     test_conf = parse_config(load_test_config("tests/data/test_confs/test1.yml"))
     orch = Docker(test_conf)
@@ -111,6 +110,7 @@ def test_docker_bootstrap(reset_dir) -> None:
     test_conf = parse_config(
         load_test_config("tests/data/test_confs_dockerfile/test1.yml")
     )
+    print(test_conf)
     os.chdir("tests/data/test_confs_dockerfile")
     test_conf["running_tmp_dir"] = "/tmp/nacl/"
     nacl.utils.copy_srv_dir(

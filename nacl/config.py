@@ -5,12 +5,12 @@ import yaml
 import nacl.orchestrators
 from nacl.exceptions import ConfigException, ConfigFileNotFound
 
-TMP_DIR = f'/home/{os.getenv("USER")}/nacl/'
+TMP_DIR = f'{os.getenv("HOME")}/.nacl/'
 
 PHASES = ["delete", "lint", "create", "converge", "idempotence", "verify", "delete"]
 
 SCHEMA = {
-    "provider": {"required": True, "type": str},
+    "provider": {"required": True, "type": dict},
     "instances": {"required": True, "type": list},
     "formula": {"required": True, "type": str},
     "scenario": {"required": True, "type": str},
@@ -28,7 +28,7 @@ def validate_config(config: dict, schema=SCHEMA) -> None:
             raise ConfigException(
                 f"Incorrect type for {k} \"{type(config[k])}\" should be {v['type']}"
             )
-    prov_name = list(config["provider"])
+    prov_name = list(config["provider"]["name"])
     prov_name[0] = prov_name[0].upper()
     instance_schema = getattr(nacl.orchestrators, "".join(prov_name)).__conf_schema__
     for instance in config["instances"]:
@@ -46,7 +46,7 @@ def validate_config(config: dict, schema=SCHEMA) -> None:
 
 def generate_instance_config(config: dict) -> list[dict]:
     new_instance_config = []
-    prov_name = list(config["provider"])
+    prov_name = list(config["provider"]["name"])
     prov_name[0] = prov_name[0].upper()
     schema = getattr(nacl.orchestrators, "".join(prov_name)).__conf_schema__
     for instance in config["instances"]:

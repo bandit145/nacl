@@ -311,22 +311,30 @@ class Vagrant:
         {% for instance in instances %}
             config.vm.define "{{ instance.prov_name }}" do |{{ instance.prov_name }}|
                 {{ instance.prov_name }}.vm.box = "{{ instance.box }}"
-                {{ instance.prov_name }}.vm.synced_folder "{{ host_dir }}", "/srv/formulas/{{ formula_name }}"
+                {{ instance.prov_name }}.vm.synced_folder "{{ host_dir }}", "/srv/formulas/"
                 {% if instance.bootstrap %}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion"
                 {% endif %}
-                {{ instance.prov_name }}.vm.provision "shell", inline: "echo 'file_roots:\\n  base: [/srv/salt/, /srv/formulas/{{ formula_name }}]\\npillar_roots:\\n  base: [/srv/formulas/{{ formula_name }}/nacl/{{ scenario_name }}/pillar/]' >> /etc/salt/minion"
+                {{ instance.prov_name }}.vm.provision "shell", inline: "echo 'features:\\n  x509_v2: true\\nfile_roots:\\n  base: [/srv/salt/, /srv/formulas/]\\npillar_roots:\\n  base: [/srv/formulas/{{ formula_name }}/nacl/{{ scenario_name }}/pillar/]' >> /etc/salt/minion"
                 {{ instance.prov_name }}.vm.provision "shell", inline: "mkdir /srv/salt/ && echo 'base: \\n  \\"*\\":\\n    - {{ formula_name }}' >> /srv/salt/top.sls"
                 {% if "grains" in grains and instance.prov_name | split('_') | last in grains.keys() %}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "echo {{ grains[intance.prov_name | split('_') | last] | to_pretty_yaml }} > /etc/salt/grains"
-                {% endif %}           
+                {% endif %}
+                {{ instance.prov_name }}.vm.provider "{{ provider }}" do |{{ provider }}, override|
+                {% if 'provider_raw_config_args' in instance %}
+                {% for line in instance.provider_raw_config_args %}
+                    {{ provider }}.{{ line }}
+                {% endfor %}
+                {% endif %}
+                end   
             end
         {% endfor %}
     end
     '''
     __conf_schema__ = {
             "box": {"type": str, "required": True},
-            "bootstrap": True
+            "bootstrap": True,
+            "provider_raw_config_args": {"type": list, "required": False}
             }
     def __init__(self, config: dict) -> None:
         self.config = config
@@ -343,7 +351,8 @@ class Vagrant:
         if not os.path.exists(self.scenario_dir):
             os.makedirs(self.scenario_dir)
         vagrant_template = Environment(loader=BaseLoader).from_string(Vagrant.VAGRANT_FILE)
-        data = vagrant_template.render(instances=self.config['instances'], formula_name=self.config['formula'], scenario_name=self.config['scenario'], host_dir=self.formula_dir)
+        data = vagrant_template.render(instances=self.config['instances'], formula_name=self.config['formula'], scenario_name=self.config['scenario'],
+            host_dir=self.formula_dir, provider=self.config['provider']['provider']['name'])
         with open(f"{self.scenario_dir}/Vagrantfile", "w") as vf:
             vf.write(data)
         self.vagrant.up()

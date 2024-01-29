@@ -4,7 +4,7 @@ formula: {formula}
 scenario: {scenario}
 verifier: {verifier}
 
-grains: {}
+grains:
   
 instances:
   - name: box1

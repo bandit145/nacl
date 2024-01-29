@@ -11,6 +11,8 @@ def create_tmp_dir(tmp_dir):
 
 
 def copy_srv_dir(tmp_dir: str, formula: str, formula_path: str) -> None:
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
     if not os.path.exists(f"/{tmp_dir}/formulas/"):
         os.mkdir(f"/{tmp_dir}/formulas")
     if os.path.exists(f"/{tmp_dir}/formulas/{formula}"):
@@ -42,7 +44,7 @@ def init_scenario(
                     scenario=scenario,
                 )
             )
-        os.mkdir(f"{path}/nacl{scenario}/pillar")
+        os.mkdir(f"{path}/nacl/{scenario}/pillar")
         with open(f"{path}/nacl/{scenario}/pillar/top.sls", "w") as pillar_top:
             pillar_top.write(nacl.templates.TOP_SLS)
         with open(f"{path}/nacl/{scenario}/pillar/default.sls", "w") as default_pillar:

@@ -117,7 +117,7 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                 phases = config["phases"]
             else:
                 phases = nacl.config.PHASES
-            orch = get_orchestrator(config["provider"], config)
+            orch = get_orchestrator(config["provider"]["name"], config)
             print(f"> Starting Test of scenario {scenario}")
             for phase in phases:
                 if phase == "create":
@@ -283,7 +283,7 @@ def run() -> None:
             sys.exit(0)
         else:
             config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            orch = get_orchestrator(config["provider"], config)
+            orch = get_orchestrator(config["provider"]["name"], config)
         if "init" in args:
             init(args)
         elif "delete" in args:

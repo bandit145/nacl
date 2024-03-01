@@ -5,6 +5,7 @@ import sys
 import vagrant
 import docker
 import yaml
+import re
 from abc import ABC, abstractmethod
 from jinja2 import Environment, BaseLoader, select_autoescape
 
@@ -315,10 +316,12 @@ class Vagrant:
                 {% if instance.bootstrap %}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "curl -L https://bootstrap.saltstack.com -o /bootstrap_script.sh && chmod +x /bootstrap_script.sh && /bootstrap_script.sh && echo 'file_client: local' >> /etc/salt/minion"
                 {% endif %}
+                {% if salt_exec_mode == 'masterless_minion '%}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "echo 'features:\\n  x509_v2: true\\nfile_roots:\\n  base: [/srv/salt/, /srv/formulas/]\\npillar_roots:\\n  base: [/srv/formulas/{{ formula_name }}/nacl/{{ scenario_name }}/pillar/]' >> /etc/salt/minion"
                 {{ instance.prov_name }}.vm.provision "shell", inline: "mkdir /srv/salt/ && echo 'base: \\n  \\"*\\":\\n    - {{ formula_name }}' >> /srv/salt/top.sls"
                 {% if "grains" in grains and instance.prov_name | split('_') | last in grains.keys() %}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "echo {{ grains[intance.prov_name | split('_') | last] | to_pretty_yaml }} > /etc/salt/grains"
+                {% endif %}
                 {% endif %}
                 {{ instance.prov_name }}.vm.provider "{{ provider }}" do |{{ provider }}, override|
                 {% if 'provider_raw_config_args' in instance %}
@@ -333,12 +336,12 @@ class Vagrant:
     '''
     __conf_schema__ = {
             "box": {"type": str, "required": True},
-            "bootstrap": True,
+            "bootstrap": False,
             "provider_raw_config_args": {"type": list, "required": False}
             }
     def __init__(self, config: dict) -> None:
         self.config = config
-        self.scenario_dir = f"{self.config['running_tmp_dir']}/vagrant/{self.config['formula']}/{self.config['scenario']}/nacl/"
+        self.scenario_dir = f"{self.config['running_tmp_dir']}vagrant/{self.config['formula']}/{self.config['scenario']}/nacl/"
         self.formula_dir = f"{self.config['running_tmp_dir']}/formulas"
         self.vagrant = vagrant.Vagrant(self.scenario_dir, quiet_stdout=False, quiet_stderr=False)
 
@@ -352,10 +355,33 @@ class Vagrant:
             os.makedirs(self.scenario_dir)
         vagrant_template = Environment(loader=BaseLoader).from_string(Vagrant.VAGRANT_FILE)
         data = vagrant_template.render(instances=self.config['instances'], formula_name=self.config['formula'], scenario_name=self.config['scenario'],
-            host_dir=self.formula_dir, provider=self.config['provider']['provider']['name'])
+            host_dir=self.formula_dir, provider=self.config['provider']['provider']['name'], salt_exec_mode=self.config['salt_exec_mode'])
         with open(f"{self.scenario_dir}/Vagrantfile", "w") as vf:
             vf.write(data)
         self.vagrant.up()
+        if self.config['salt_exec_mode'] == 'salt-ssh':
+            roster = {}
+            master = {}
+            master["file_roots"] = dict(base=[self.formula_dir])
+            master["pillar_roots"] = dict(base=[f"{self.formula_dir}{self.config['formula']}/nacl/{self.config['scenario']}/pillar"])
+            ident_file = ''
+            for vm in self.config['instances']:
+                ssh_config = self.vagrant.ssh_config(vm_name=vm['prov_name'])
+                ssh_port = re.findall(r'\sPort (\d*)', ssh_config)[0]
+                if ident_file == '':
+                    ident_file = re.findall(r'\sIdentityFile (.*)', ssh_config)[0]
+                roster[vm['prov_name']] = dict(host="127.0.0.1", user="vagrant", port=ssh_port, sudo=True)
+            with open(f"{self.scenario_dir}/roster", "w") as roster_file:
+                roster_file.write(yaml.dump(roster))
+            salt_config = {}
+            salt_config['salt-ssh'] = dict(roster_file=f"{self.scenario_dir}roster", 
+                config_dir=self.scenario_dir, log_file=f"{self.scenario_dir}salt_log.txt", 
+                ssh_log_file=f"{self.scenario_dir}salt_ssh_log.txt", pki_dir=f"{self.scenario_dir}pki", cache_dir=f"{self.scenario_dir}cache", ssh_priv=ident_file)
+            with open(f"{self.scenario_dir}/Saltfile", "w") as salt_file:
+                salt_file.write(yaml.dump(salt_config))
+            with open(f"{self.scenario_dir}master", "w") as master_file:
+                master_file.write(yaml.dump(master))
+
     
     def login(self, host: str) -> None:
         subprocess.run(f"vagrant ssh nacl_{self.config['formula']}_{self.config['scenario']}_{host}", shell=True, cwd=self.scenario_dir)
@@ -369,8 +395,11 @@ class Vagrant:
         print("> Applying state")
         for vm in self.config['instances']:
             print(f"==> Applying state on {vm['prov_name'].split('_')[-1]}")
-            try: 
-                output = self.vagrant.ssh(vm_name=vm['prov_name'], command="sudo salt-call --local state.apply")
+            try:
+                if self.config['salt_exec_mode'] == 'salt-ssh':
+                    output = subprocess.run(f'salt-ssh {vm["prov_name"]} --saltfile={self.scenario_dir}Saltfile -i --no-host-keys state.sls {self.config["formula"]}', shell=True)
+                else:
+                    output = self.vagrant.ssh(vm_name=vm['prov_name'], command="sudo salt-call --local state.apply")
             except subprocess.CalledProcessError as error:
                 output = error.output.decode()
         return output

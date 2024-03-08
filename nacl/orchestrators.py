@@ -363,7 +363,7 @@ class Vagrant:
             roster = {}
             master = {}
             master["file_roots"] = dict(base=[self.formula_dir])
-            master["pillar_roots"] = dict(base=[f"{self.formula_dir}{self.config['formula']}/nacl/{self.config['scenario']}/pillar"])
+            master["pillar_roots"] = dict(base=[f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"])
             ident_file = ''
             for vm in self.config['instances']:
                 ssh_config = self.vagrant.ssh_config(vm_name=vm['prov_name'])
@@ -397,7 +397,7 @@ class Vagrant:
             print(f"==> Applying state on {vm['prov_name'].split('_')[-1]}")
             try:
                 if self.config['salt_exec_mode'] == 'salt-ssh':
-                    output = subprocess.run(f'salt-ssh {vm["prov_name"]} --saltfile={self.scenario_dir}Saltfile -i --no-host-keys state.sls {self.config["formula"]}', shell=True)
+                    output = subprocess.run(f'salt-ssh {vm["prov_name"]} --saltfile={self.scenario_dir}Saltfile -i state.sls {self.config["formula"]}', shell=True)
                 else:
                     output = self.vagrant.ssh(vm_name=vm['prov_name'], command="sudo salt-call --local state.apply")
             except subprocess.CalledProcessError as error:

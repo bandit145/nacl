@@ -105,7 +105,7 @@ def login(
 
 def lint() -> None:
     print("> Linting")
-    proc = subprocess.run(f"salt-lint -r nacl{} */*", shell=True)
+    proc = subprocess.run("salt-lint */*", shell=True)
     if proc.returncode != 0:
         print("[x] Linting failed", file=sys.stderr)
         sys.exit(1)
@@ -139,10 +139,10 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                 if phase == "create":
                     create(args, cur_dir, config, orch)
                 elif phase == "converge":
-                    output = converge(args, cur_dir, config, orch)
-                    if re.findall(r"Failed:     0", output) == []:
-                        orch.cleanup()
-                        sys.exit(1)
+                    for k, v in converge(args, cur_dir, config, orch):
+                        if re.findall(r"Failed:     0", v) == []:
+                            orch.cleanup()
+                            sys.exit(1)
                 elif phase == "lint":
                     os.chdir(cur_dir)
                     lint()
@@ -154,7 +154,7 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                 elif phase == "verify":
                     verify(args, config, orch)
                 else:
-                    print(f"[x] unkown testing phase {phase}", file=sys.stderr)
+                    print(f"[x] Unknown testing phase {phase}", file=sys.stderr)
                     orch.cleanup()
                     sys.exit(1)
 

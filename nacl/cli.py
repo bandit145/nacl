@@ -44,7 +44,6 @@ def converge(
     orch: nacl.orchestrators.Orchestrator,
 ) -> dict[str, str]:
     scenario_dir = f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/nacl/"
-    print(scenario_dir)
     if orch.get_inventory() == []:
         nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
@@ -69,9 +68,9 @@ def converge(
 def idempotence(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     print("> Running idempotence check")
     isntance_output = converge(args, cur_dir, config, orch)
-    for output in instance_output:
-        if re.findall(r"\(changed=\d*\)", output) != []:
-            print("==> Failed idempotance check", file=sys.stderr)
+    for k, v in instance_output.items():
+        if re.findall(r"\(changed=\d*\)", v) != []:
+            print(f"==> {k} Failed idempotance check", file=sys.stderr)
             orch.cleanup()
             sys.exit(1)
 
@@ -139,7 +138,7 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                 if phase == "create":
                     create(args, cur_dir, config, orch)
                 elif phase == "converge":
-                    for k, v in converge(args, cur_dir, config, orch):
+                    for k, v in converge(args, cur_dir, config, orch).items():
                         if re.findall(r"Failed:     0", v) == []:
                             orch.cleanup()
                             sys.exit(1)

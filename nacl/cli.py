@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import shutil
 from typing import Tuple
 
 import nacl.config
@@ -41,37 +42,47 @@ def converge(
     cur_dir: str,
     config: dict,
     orch: nacl.orchestrators.Orchestrator,
-) -> str:
-    scenario_dir = f"{config['running_tmp_dir']}/{str(type(orch)).lower()}/{config['formula']}/{config['scenario']}/nacl/"
+) -> dict[str, str]:
+    scenario_dir = f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/nacl/"
+    print(scenario_dir)
     if orch.get_inventory() == []:
         nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     if orch.get_inventory() == []:
         orch.orchestrate()
+    instance_output: dict[str, str] = {}
     for instance in config['instances']: 
         print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
-        try:
-            if config['salt_exec_mode'] == 'salt-ssh':
-                output = subprocess.run(f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}', shell=True)
-        except subprocess.CalledProcessError as error:
-            output = error.output.decode()
+        if config['salt_exec_mode'] == 'salt-ssh':
+            proc = subprocess.Popen(f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}', stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
+            while not proc.poll():
+                out, errs = proc.communicate()
+                if out:
+                    instance_output[instance['prov_name']] = out.decode()
+                elif errs:
+                    instance_output[instance['prov_name']] = errs.decode()
+        print(instance_output[instance['prov_name']])
+    return instance_output
 
 
-def idempotence(orch: nacl.orchestrators.Orchestrator) -> None:
+def idempotence(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
     print("> Running idempotence check")
-    output = orch.converge()
-    if re.findall(r"\(changed=\d*\)", output) != []:
-        print("==> Failed idempotance check", file=sys.stderr)
-        orch.cleanup()
-        sys.exit(1)
+    isntance_output = converge(args, cur_dir, config, orch)
+    for output in instance_output:
+        if re.findall(r"\(changed=\d*\)", output) != []:
+            print("==> Failed idempotance check", file=sys.stderr)
+            orch.cleanup()
+            sys.exit(1)
 
 
-def delete(
+def destroy(
     args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator
 ) -> None:
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
+    if os.path.exists(f"{config['running_tmp_dir']}/formulas/{config['formula']}"):
+        shutil.rmtree(f"{config['running_tmp_dir']}/formulas/{config['formula']}")
     orch.cleanup()
 
 
@@ -94,7 +105,7 @@ def login(
 
 def lint() -> None:
     print("> Linting")
-    proc = subprocess.run("salt-lint */*", shell=True)
+    proc = subprocess.run(f"salt-lint -r nacl{} */*", shell=True)
     if proc.returncode != 0:
         print("[x] Linting failed", file=sys.stderr)
         sys.exit(1)
@@ -135,8 +146,8 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                 elif phase == "lint":
                     os.chdir(cur_dir)
                     lint()
-                elif phase == "delete":
-                    delete(args, config, orch)
+                elif phase == "destroy":
+                    destroy(args, config, orch)
                 elif phase == "idempotence":
                     os.chdir(cur_dir)
                     idempotence(orch)
@@ -216,10 +227,10 @@ def parse_args() -> Tuple[argparse.Namespace, argparse.ArgumentParser]:
         help="Scenario to create resources for. Default is default",
         default="default",
     )
-    # delete command
-    delete_parser = subparsers.add_parser("delete")
-    delete_parser.add_argument("--delete", help=argparse.SUPPRESS)
-    delete_parser.add_argument(
+    # destroy command
+    destroy_parser = subparsers.add_parser("destroy")
+    destroy_parser.add_argument("--destroy", help=argparse.SUPPRESS)
+    destroy_parser.add_argument(
         "-s",
         "--scenario",
         help="Scenario to delete resources for. Default is default",
@@ -291,8 +302,8 @@ def run() -> None:
             orch = get_orchestrator(config["provider"]["name"], config)
         if "init" in args:
             init(args)
-        elif "delete" in args:
-            delete(args, config, orch)
+        elif "destroy" in args:
+            destroy(args, config, orch)
         elif "create" in args:
             create(args, cur_dir, config, orch)
         elif "sync" in args:
@@ -310,6 +321,7 @@ def run() -> None:
     except (
         nacl.exceptions.ConfigFileNotFound,
         nacl.exceptions.ScenarioExists,
+        nacl.exceptions.ConfigException,
     ) as error:
         print("[x]", error, file=sys.stderr)
         sys.exit(1)

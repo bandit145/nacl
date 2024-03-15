@@ -1,16 +1,14 @@
 import subprocess
-
+import sys
 import nacl.orchestrators
 
 
 class Verifier:
     def __init__(
-        self, config: dict, ochestrator: nacl.orchestrators.Orchestrator
+        self, config: dict, orchestrator: nacl.orchestrators.Orchestrator
     ) -> None:
-        self.inventory = [
-            f"{ochestrator.connection_type}://{x}" for x in ochestrator.get_inventory()
-        ]
         self.config = config
+        self.scenario_dir = orchestrator.scenario_dir
 
     def run(self) -> None:
         pass
@@ -21,9 +19,15 @@ class Testinfra(Verifier):
         self, config: dict, orchestrator: nacl.orchestrators.Orchestrator
     ) -> None:
         super().__init__(config, orchestrator)
+        self.inventory = [
+            f"ssh://{x}" for x in orchestrator.get_inventory()
+        ]
 
     def run(self) -> None:
-        subprocess.run(
-            f'py.test --hosts={",".join(self.inventory)} nacl/{self.config["scenario"]}/tests/',
+        proc = subprocess.run(
+            f'python -m pytest --ssh-config={self.scenario_dir}/ssh_config --hosts={",".join(self.inventory)} tests/',
             shell=True,
+            cwd=f"{self.config['running_tmp_dir']}/formulas/{self.config['formula']}/nacl/{self.config['scenario']}"
         )
+        if proc.returncode != 0:
+            sys.exit(proc.returncode)

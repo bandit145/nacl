@@ -7,7 +7,7 @@ from nacl.exceptions import ConfigException, ConfigFileNotFound
 
 TMP_DIR = f'{os.getenv("HOME")}/.nacl/'
 
-PHASES = ["delete", "lint", "create", "converge", "idempotence", "verify", "delete"]
+PHASES = ["destroy", "lint", "create", "converge", "idempotence", "verify"]
 
 SCHEMA = {
     "provider": {"required": True, "type": dict},

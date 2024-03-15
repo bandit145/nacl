@@ -1,9 +1,12 @@
 ---
 
-provider: docker
+provider:
+  name: vagrant
+  provider: vmware_desktop
 formula: nacl-test
 scenario: default
 verifier: testinfra
+salt_exec_mode: salt-ssh
 
 grains:
   box1:
@@ -16,12 +19,7 @@ grains:
 
 instances:
   - name: box1
-    image: docker.io/library/alpine:latest
-    networks:
-      - name: net1
-      - name: net2
+    box: box1
 
   - name: box2
-    image: docker.io/library/alpine:latest
-    networks:
-      - name: net1
+    box: box2

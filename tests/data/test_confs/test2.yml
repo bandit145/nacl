@@ -1,13 +1,16 @@
 ---
 
-provider: docker
+provider:
+  name: vagrant
+  provider: vmware_desktop
 formula: nacl-test
 scenario: default
 verifier: testinfra
+salt_exec_mode: salt_ssh
 
 instances:
   - name: box1
-    image: docker.io/library/alpine:latest
+    box: box1
 
   - name: box2
-    image: docker.io/library/alpine:latest
+    box: box2

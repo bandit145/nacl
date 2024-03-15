@@ -42,15 +42,20 @@ def converge(
     config: dict,
     orch: nacl.orchestrators.Orchestrator,
 ) -> str:
+    scenario_dir = f"{config['running_tmp_dir']}/{str(type(orch)).lower()}/{config['formula']}/{config['scenario']}/nacl/"
     if orch.get_inventory() == []:
         nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     if orch.get_inventory() == []:
         orch.orchestrate()
-    output = orch.converge()
-    print(output)
-    return output
+    for instance in config['instances']: 
+        print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
+        try:
+            if config['salt_exec_mode'] == 'salt-ssh':
+                output = subprocess.run(f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}', shell=True)
+        except subprocess.CalledProcessError as error:
+            output = error.output.decode()
 
 
 def idempotence(orch: nacl.orchestrators.Orchestrator) -> None:

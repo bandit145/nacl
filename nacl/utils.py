@@ -9,7 +9,6 @@ def create_tmp_dir(tmp_dir):
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
-
 def copy_srv_dir(tmp_dir: str, formula: str, formula_path: str) -> None:
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)

@@ -17,8 +17,9 @@ SCHEMA = {
     "verifier": {"required": True, "type": str},
     "grains": {"required": False, "type": dict},
     "phases": {"required": False, "type": list},
-    "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh"]}
+    "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh"]},
 }
+
 
 # bad validator that is not generic but whatever. Brain no worky today.
 def validate_config(config: dict, schema=SCHEMA) -> None:
@@ -29,8 +30,10 @@ def validate_config(config: dict, schema=SCHEMA) -> None:
             raise ConfigException(
                 f"Incorrect type for {k} \"{type(config[k])}\" should be {v['type']}"
             )
-        elif "options" in v and config[k] not in v['options']:
-            raise ConfigException(f"Option provided for {k} not allowed. Allowable selections are: {v['options']}")
+        elif "options" in v and config[k] not in v["options"]:
+            raise ConfigException(
+                f"Option provided for {k} not allowed. Allowable selections are: {v['options']}"
+            )
     prov_name = list(config["provider"]["name"])
     prov_name[0] = prov_name[0].upper()
     instance_schema = getattr(nacl.orchestrators, "".join(prov_name)).__conf_schema__

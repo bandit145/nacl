@@ -14,22 +14,26 @@ from nacl.exceptions import BootStrapException, NoHostSpecified
 
 class Orchestrator(ABC):
     connection_type = ""
+
     @abstractmethod
     def orchestrate(self):
         pass
+
     @abstractmethod
     def cleanup(self):
         pass
+
     @abstractmethod
     def get_inventory(self):
         pass
+
     @abstractmethod
     def login(self, host):
         pass
 
 
 class Vagrant(Orchestrator):
-    VAGRANT_FILE = '''\n
+    VAGRANT_FILE = """\n
     Vagrant.configure("2") do | config |
         {% for instance in instances %}
             config.vm.define "{{ instance.prov_name }}" do |{{ instance.prov_name }}|
@@ -50,52 +54,76 @@ class Vagrant(Orchestrator):
             end
         {% endfor %}
     end
-    '''
+    """
     __conf_schema__ = {
-            "box": {"type": str, "required": True},
-            "bootstrap": False,
-            "provider_raw_config_args": {"type": list, "required": False}
-            }
+        "box": {"type": str, "required": True},
+        "bootstrap": False,
+        "provider_raw_config_args": {"type": list, "required": False},
+    }
+
     def __init__(self, config: dict) -> None:
         self.config = config
         self.scenario_dir = f"{self.config['running_tmp_dir']}vagrant/{self.config['formula']}/{self.config['scenario']}/nacl/"
         self.formula_dir = f"{self.config['running_tmp_dir']}/formulas"
-        self.vagrant = vagrant.Vagrant(self.scenario_dir, quiet_stdout=False, quiet_stderr=False)
+        self.vagrant = vagrant.Vagrant(
+            self.scenario_dir, quiet_stdout=False, quiet_stderr=False
+        )
 
     def get_inventory(self) -> list[str]:
         if not os.path.exists(f"{self.scenario_dir}/Vagrantfile"):
             return []
-        return [x.name for x in self.vagrant.status() if x.state == 'running']
+        return [x.name for x in self.vagrant.status() if x.state == "running"]
 
     def orchestrate(self) -> None:
         if not os.path.exists(self.scenario_dir):
             os.makedirs(self.scenario_dir)
-        vagrant_template = Environment(loader=BaseLoader).from_string(Vagrant.VAGRANT_FILE)
-        data = vagrant_template.render(instances=self.config['instances'], formula_name=self.config['formula'], scenario_name=self.config['scenario'],
-            host_dir=self.formula_dir, provider=self.config['provider']['provider']['name'], salt_exec_mode=self.config['salt_exec_mode'])
+        vagrant_template = Environment(loader=BaseLoader).from_string(
+            Vagrant.VAGRANT_FILE
+        )
+        data = vagrant_template.render(
+            instances=self.config["instances"],
+            formula_name=self.config["formula"],
+            scenario_name=self.config["scenario"],
+            host_dir=self.formula_dir,
+            provider=self.config["provider"]["provider"]["name"],
+            salt_exec_mode=self.config["salt_exec_mode"],
+        )
         with open(f"{self.scenario_dir}/Vagrantfile", "w") as vf:
             vf.write(data)
         self.vagrant.up()
-        if self.config['salt_exec_mode'] == 'salt-ssh':
+        if self.config["salt_exec_mode"] == "salt-ssh":
             roster = {}
             master = {}
             master["file_roots"] = dict(base=[self.formula_dir])
-            master["pillar_roots"] = dict(base=[f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"])
-            ident_file = ''
-            ssh_config_full = ''
-            for vm in self.config['instances']:
-                ssh_config = self.vagrant.ssh_config(vm_name=vm['prov_name'])
-                ssh_port = re.findall(r'\sPort (\d*)', ssh_config)[0]
-                if ident_file == '':
-                    ident_file = re.findall(r'\sIdentityFile (.*)', ssh_config)[0]
-                roster[vm['prov_name']] = dict(host="127.0.0.1", user="vagrant", port=ssh_port, sudo=True)
+            master["pillar_roots"] = dict(
+                base=[
+                    f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"
+                ]
+            )
+            ident_file = ""
+            ssh_config_full = ""
+            for vm in self.config["instances"]:
+                ssh_config = self.vagrant.ssh_config(vm_name=vm["prov_name"])
+                ssh_port = re.findall(r"\sPort (\d*)", ssh_config)[0]
+                if ident_file == "":
+                    ident_file = re.findall(r"\sIdentityFile (.*)", ssh_config)[0]
+                roster[vm["prov_name"]] = dict(
+                    host="127.0.0.1", user="vagrant", port=ssh_port, sudo=True
+                )
                 ssh_config_full += ssh_config
             with open(f"{self.scenario_dir}/roster", "w") as roster_file:
                 roster_file.write(yaml.dump(roster))
             salt_config = {}
-            salt_config['salt-ssh'] = dict(roster_file=f"{self.scenario_dir}roster", 
-                config_dir=self.scenario_dir, log_file=f"{self.scenario_dir}salt_log.txt", 
-                ssh_log_file=f"{self.scenario_dir}salt_ssh_log.txt", pki_dir=f"{self.scenario_dir}pki", cache_dir=f"{self.scenario_dir}cache", ssh_priv=ident_file, ssh_options=["StrictHostKeyChecking=no"])
+            salt_config["salt-ssh"] = dict(
+                roster_file=f"{self.scenario_dir}roster",
+                config_dir=self.scenario_dir,
+                log_file=f"{self.scenario_dir}salt_log.txt",
+                ssh_log_file=f"{self.scenario_dir}salt_ssh_log.txt",
+                pki_dir=f"{self.scenario_dir}pki",
+                cache_dir=f"{self.scenario_dir}cache",
+                ssh_priv=ident_file,
+                ssh_options=["StrictHostKeyChecking=no"],
+            )
             with open(f"{self.scenario_dir}/Saltfile", "w") as salt_file:
                 salt_file.write(yaml.dump(salt_config))
             with open(f"{self.scenario_dir}master", "w") as master_file:
@@ -103,13 +131,15 @@ class Vagrant(Orchestrator):
             with open(f"{self.scenario_dir}ssh_config", "w") as ssh_config_file:
                 ssh_config_file.write(ssh_config_full)
 
-    
     def login(self, host: str) -> None:
-        subprocess.run(f"vagrant ssh nacl_{self.config['formula']}_{self.config['scenario']}_{host}", shell=True, cwd=self.scenario_dir)
+        subprocess.run(
+            f"vagrant ssh nacl_{self.config['formula']}_{self.config['scenario']}_{host}",
+            shell=True,
+            cwd=self.scenario_dir,
+        )
 
     def cleanup(self) -> None:
         if os.path.exists(f"{self.scenario_dir}/Vagrantfile"):
             self.vagrant.destroy()
         if not os.path.exists(self.scenario_dir):
             shutil.rmtree(self.scenario_dir)
-

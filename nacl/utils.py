@@ -9,6 +9,7 @@ def create_tmp_dir(tmp_dir):
     if not os.path.exists(tmp_dir):
         os.makedirs(tmp_dir)
 
+
 def copy_srv_dir(tmp_dir: str, formula: str, formula_path: str) -> None:
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)
@@ -48,8 +49,5 @@ def init_scenario(
             pillar_top.write(nacl.templates.TOP_SLS)
         with open(f"{path}/nacl/{scenario}/pillar/default.sls", "w") as default_pillar:
             default_pillar.write("")
-        if driver == "docker":
-            with open(f"{path}/nacl/{scenario}/Dockerfile.base", "w") as d_file:
-                d_file.write(nacl.templates.DOCKER)
     else:
         raise ScenarioExists(f"{scenario} scenario already exists")

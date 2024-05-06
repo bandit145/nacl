@@ -51,23 +51,28 @@ def converge(
     if orch.get_inventory() == []:
         orch.orchestrate()
     instance_output: dict[str, str] = {}
-    for instance in config['instances']: 
+    for instance in config["instances"]:
         print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
-        if config['salt_exec_mode'] == 'salt-ssh':
-            proc = subprocess.Popen(f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}', stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True)
-            while not proc.poll():
-                out, errs = proc.communicate()
-                if out:
-                    instance_output[instance['prov_name']] = out.decode()
-                elif errs:
-                    instance_output[instance['prov_name']] = errs.decode()
-        print(instance_output[instance['prov_name']])
+        if config["salt_exec_mode"] == "salt-ssh":
+            proc = subprocess.run(
+                f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}',
+                shell=True,
+                capture_output=True,
+            )
+            output = proc.stdout.decode()
+            print(output)
+            instance_output[instance["prov_name"].split("_")[-1]] = output
     return instance_output
 
 
-def idempotence(args: argparse.Namespace, cur_dir: str, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
+def idempotence(
+    args: argparse.Namespace,
+    cur_dir: str,
+    config: dict,
+    orch: nacl.orchestrators.Orchestrator,
+) -> None:
     print("> Running idempotence check")
-    isntance_output = converge(args, cur_dir, config, orch)
+    instance_output = converge(args, cur_dir, config, orch)
     for k, v in instance_output.items():
         if re.findall(r"\(changed=\d*\)", v) != []:
             print(f"==> {k} Failed idempotance check", file=sys.stderr)
@@ -139,7 +144,7 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                     create(args, cur_dir, config, orch)
                 elif phase == "converge":
                     for k, v in converge(args, cur_dir, config, orch).items():
-                        if re.findall(r"Failed:     0", v) == []:
+                        if re.findall(r"Failed:\s+0", v) == []:
                             orch.cleanup()
                             sys.exit(1)
                 elif phase == "lint":
@@ -149,7 +154,7 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
                     destroy(args, config, orch)
                 elif phase == "idempotence":
                     os.chdir(cur_dir)
-                    idempotence(orch)
+                    idempotence(args, cur_dir, config, orch)
                 elif phase == "verify":
                     verify(args, config, orch)
                 else:

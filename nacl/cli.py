@@ -35,6 +35,34 @@ def create(
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     orch.orchestrate()
+    prepare(args, cur_dir, config, orch)
+
+def prepare(
+    args: argparse.Namespace,
+    cur_dir: str,
+    config: dict,
+    orch: nacl.orchestrators.Orchestrator,
+) -> dict[str, str]:
+    scenario_dir = f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/nacl/"
+    if orch.get_inventory() == []:
+        nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
+    if not "nacl.yml" in os.listdir():
+        os.chdir(f"nacl/{config['scenario']}")
+    if orch.get_inventory() == []:
+        orch.orchestrate()
+    instance_output: dict[str, str] = {}
+    for instance in config["instances"]:
+        print(f"==> Preparing instances on {instance['prov_name'].split('_')[-1]}")
+        if config["salt_exec_mode"] == "salt-ssh":
+            proc = subprocess.run(
+                f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls prepare',
+                shell=True,
+                capture_output=True,
+            )
+            output = proc.stdout.decode()
+            print(output)
+            instance_output[instance["prov_name"].split("_")[-1]] = output
+    return instance_output
 
 
 def converge(
@@ -231,6 +259,9 @@ def parse_args() -> Tuple[argparse.Namespace, argparse.ArgumentParser]:
         help="Scenario to create resources for. Default is default",
         default="default",
     )
+    prepare_parser = subparsers.add_parser("prepare")
+    prepare_parser.add_argument("--prepare", help=argparse.SUPPRESS)
+    prepare_parser.add_argument("-s", "--scenario", help="Scenario to prepare resources for. Default is default", default="default")
     # destroy command
     destroy_parser = subparsers.add_parser("destroy")
     destroy_parser.add_argument("--destroy", help=argparse.SUPPRESS)
@@ -316,6 +347,8 @@ def run() -> None:
             )
         elif "converge" in args:
             converge(args, cur_dir, config, orch)
+        elif "prepare" in args:
+            prepare(args, cur_dir, config, orch)
         elif "login" in args:
             login(args, config, orch)
         elif "verify" in args:

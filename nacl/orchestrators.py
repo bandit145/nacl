@@ -94,7 +94,7 @@ class Vagrant(Orchestrator):
         if self.config["salt_exec_mode"] == "salt-ssh":
             roster = {}
             master = {}
-            master["file_roots"] = dict(base=[self.formula_dir])
+            master["file_roots"] = dict(base=[self.formula_dir, f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}"])
             master["pillar_roots"] = dict(
                 base=[
                     f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"

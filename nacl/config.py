@@ -7,7 +7,7 @@ from nacl.exceptions import ConfigException, ConfigFileNotFound
 
 TMP_DIR = f'{os.getenv("HOME")}/.nacl/'
 
-PHASES = ["destroy", "lint", "create", "converge", "idempotence", "verify"]
+PHASES = ["destroy", "lint", "create", "prepare","converge", "idempotence", "verify"]
 
 SCHEMA = {
     "provider": {"required": True, "type": dict},
@@ -17,6 +17,7 @@ SCHEMA = {
     "verifier": {"required": True, "type": str},
     "grains": {"required": False, "type": dict},
     "phases": {"required": False, "type": list},
+    "master_config": {"required": True, "type": dict},
     "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh"]},
 }
 
@@ -24,7 +25,7 @@ SCHEMA = {
 # bad validator that is not generic but whatever. Brain no worky today.
 def validate_config(config: dict, schema=SCHEMA) -> None:
     for k, v in schema.items():
-        if v["required"] and k not in config.keys():
+        if v["required"] and k not in config.keys() and 'enabled':
             raise ConfigException(f"Missing required key {k}")
         elif k in config.keys() and v["type"] != type(config[k]):
             raise ConfigException(

@@ -5,6 +5,7 @@ provider:
 formula: {formula}
 scenario: {scenario}
 verifier: {verifier}
+master_config: {}
 
 grains:
   

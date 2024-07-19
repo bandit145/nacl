@@ -102,6 +102,7 @@ class Vagrant(Orchestrator):
             )
             ident_file = ""
             ssh_config_full = ""
+            master.update(self.config['master_config'])
             for vm in self.config["instances"]:
                 ssh_config = self.vagrant.ssh_config(vm_name=vm["prov_name"])
                 ssh_port = re.findall(r"\sPort (\d*)", ssh_config)[0]

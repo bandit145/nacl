@@ -44,6 +44,9 @@ class Vagrant(Orchestrator):
                 {% if "grains" in grains and instance.prov_name | split('_') | last in grains.keys() %}
                 {{ instance.prov_name }}.vm.provision "shell", inline: "echo {{ grains[intance.prov_name | split('_') | last] | to_pretty_yaml }} > /etc/salt/grains"
                 {% endif %}
+                {% for line in instance.instance_raw_config_args %}
+                {{ instance.prov_name }}.{{ line }}
+                {% endfor %}
                 {{ instance.prov_name }}.vm.provider "{{ provider }}" do |{{ provider }}, override|
                 {% if 'provider_raw_config_args' in instance %}
                 {% for line in instance.provider_raw_config_args %}
@@ -59,6 +62,7 @@ class Vagrant(Orchestrator):
         "box": {"type": str, "required": True},
         "bootstrap": False,
         "provider_raw_config_args": {"type": list, "required": False},
+        "instance_raw_config_args": {"type": list, "required": False}
     }
 
     def __init__(self, config: dict) -> None:

@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import shutil
+import pathlib
 from typing import Tuple
 
 import nacl.config
@@ -51,18 +52,27 @@ def prepare(
     if orch.get_inventory() == []:
         orch.orchestrate()
     instance_output: dict[str, str] = {}
+    prepared_instances = []
+    for item in os.listdir(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}"):
+        if 'prepared' in item:
+            prepared_instances.append(item.split(".")[0])
     for instance in config["instances"]:
-        print(f"==> Preparing instances on {instance['prov_name'].split('_')[-1]}")
-        if config["salt_exec_mode"] == "salt-ssh":
-            proc = subprocess.run(
-                f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls prepare',
-                shell=True,
-                capture_output=True,
-            )
-            output = proc.stdout.decode()
-            print(output)
-            instance_output[instance["prov_name"].split("_")[-1]] = output
-    return instance_output
+        if instance['prov_name'] in prepared_instances:
+            print(f"==> instance {instance['prov_name'].split('_')[-1]} already prepared")
+        else:
+            print(f"==> Preparing instances on {instance['prov_name'].split('_')[-1]}")
+            if config["salt_exec_mode"] == "salt-ssh":
+                proc = subprocess.run(
+                    f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls prepare',
+                    shell=True,
+                    capture_output=True,
+                )
+                output = proc.stdout.decode()
+                print(output)
+                instance_output[instance["prov_name"].split("_")[-1]] = output
+                if proc.returncode == 0:
+                    prepared = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.prepared")
+                    prepared.touch()
 
 
 def converge(
@@ -78,6 +88,7 @@ def converge(
         os.chdir(f"nacl/{config['scenario']}")
     if orch.get_inventory() == []:
         orch.orchestrate()
+    prepare(args, cur_dir, config, orch)
     instance_output: dict[str, str] = {}
     for instance in config["instances"]:
         print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
@@ -116,6 +127,9 @@ def destroy(
     if os.path.exists(f"{config['running_tmp_dir']}/formulas/{config['formula']}"):
         shutil.rmtree(f"{config['running_tmp_dir']}/formulas/{config['formula']}")
     orch.cleanup()
+    if os.path.exists(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}"):
+        shutil.rmtree(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}")
+
 
 
 def verify(

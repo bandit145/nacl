@@ -61,6 +61,7 @@ class Vagrant(Orchestrator):
     __conf_schema__ = {
         "box": {"type": str, "required": True},
         "bootstrap": False,
+        "converge": {"type": bool, "required": False},
         "provider_raw_config_args": {"type": list, "required": False},
         "instance_raw_config_args": {"type": list, "required": False}
     }
@@ -98,22 +99,20 @@ class Vagrant(Orchestrator):
         if self.config["salt_exec_mode"] == "salt-ssh":
             roster = {}
             master = {}
-            master["file_roots"] = dict(base=[self.formula_dir, f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}"])
+            master["file_roots"] = dict(base=[self.formula_dir, f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}"] + self.config["extra_file_roots"])
             master["pillar_roots"] = dict(
                 base=[
                     f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"
                 ]
             )
-            ident_file = ""
             ssh_config_full = ""
             master.update(self.config['master_config'])
             for vm in self.config["instances"]:
                 ssh_config = self.vagrant.ssh_config(vm_name=vm["prov_name"])
                 ssh_port = re.findall(r"\sPort (\d*)", ssh_config)[0]
-                if ident_file == "":
-                    ident_file = re.findall(r"\sIdentityFile (.*)", ssh_config)[0]
+                ident_file = re.findall(r"\sIdentityFile (.*)", ssh_config)[0]
                 roster[vm["prov_name"]] = dict(
-                    host="127.0.0.1", user="vagrant", port=ssh_port, sudo=True
+                    host="127.0.0.1", user="vagrant", port=ssh_port, sudo=True, priv=ident_file
                 )
                 ssh_config_full += ssh_config
             with open(f"{self.scenario_dir}/roster", "w") as roster_file:
@@ -126,8 +125,8 @@ class Vagrant(Orchestrator):
                 ssh_log_file=f"{self.scenario_dir}salt_ssh_log.txt",
                 pki_dir=f"{self.scenario_dir}pki",
                 cache_dir=f"{self.scenario_dir}cache",
-                ssh_priv=ident_file,
                 ssh_options=["StrictHostKeyChecking=no"],
+                ssh_priv=""
             )
             with open(f"{self.scenario_dir}/Saltfile", "w") as salt_file:
                 salt_file.write(yaml.dump(salt_config))

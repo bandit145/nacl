@@ -17,6 +17,7 @@ SCHEMA = {
     "verifier": {"required": True, "type": str},
     "grains": {"required": False, "type": dict},
     "phases": {"required": False, "type": list},
+    "extra_file_roots": {"required": False, "type": list},
     "master_config": {"required": True, "type": dict},
     "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh"]},
 }

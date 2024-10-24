@@ -91,16 +91,17 @@ def converge(
     prepare(args, cur_dir, config, orch)
     instance_output: dict[str, str] = {}
     for instance in config["instances"]:
-        print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
-        if config["salt_exec_mode"] == "salt-ssh":
-            proc = subprocess.run(
-                f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}',
-                shell=True,
-                capture_output=True,
-            )
-            output = proc.stdout.decode()
-            print(output)
-            instance_output[instance["prov_name"].split("_")[-1]] = output
+        if instance.get("converge", True):
+            print(f"==> Applying state on {instance['prov_name'].split('_')[-1]}")
+            if config["salt_exec_mode"] == "salt-ssh":
+                proc = subprocess.run(
+                    f'salt-ssh {instance["prov_name"]} --saltfile={scenario_dir}Saltfile -i state.sls {config["formula"]}',
+                    shell=True,
+                    capture_output=True,
+                )
+                output = proc.stdout.decode()
+                print(output)
+                instance_output[instance["prov_name"].split("_")[-1]] = output
     return instance_output
 
 

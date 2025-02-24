@@ -99,7 +99,7 @@ class Vagrant(Orchestrator):
         if self.config["salt_exec_mode"] == "salt-ssh":
             roster = {}
             master = {}
-            master["file_roots"] = dict(base=[self.formula_dir, f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}"] + self.config["extra_file_roots"])
+            master["file_roots"] = dict(base=[self.formula_dir, f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}"] + self.config.get("extra_file_roots", []))
             master["pillar_roots"] = dict(
                 base=[
                     f"{self.formula_dir}/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"
@@ -145,5 +145,5 @@ class Vagrant(Orchestrator):
     def cleanup(self) -> None:
         if os.path.exists(f"{self.scenario_dir}/Vagrantfile"):
             self.vagrant.destroy()
-        if not os.path.exists(self.scenario_dir):
+        if os.path.exists(self.scenario_dir):
             shutil.rmtree(self.scenario_dir)

@@ -222,7 +222,7 @@ def parse_args() -> Tuple[argparse.Namespace, argparse.ArgumentParser]:
     # login parser
     login_parser = subparsers.add_parser("login")
     login_parser.add_argument("--login", help=argparse.SUPPRESS)
-    login_parser.add_argument("--host", help="host to login to", default=None)
+    login_parser.add_argument("--host", help="host to login to", default="")
     login_parser.add_argument(
         "--scenario", help="scenario that host belongs to", default="default"
     )
@@ -338,38 +338,39 @@ def run() -> None:
     args, parser = parse_args()
     cur_dir = os.getcwd()
     try:
-        if "lint" in args:
-            lint()
-            sys.exit(0)
-        elif "test" in args:
-            test(args, cur_dir)
-            sys.exit(0)
-        elif "scenario" not in args:
-            parser.print_help()
-            sys.exit(0)
-        else:
-            config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
-            orch = get_orchestrator(config["provider"]["name"], config)
         if "init" in args:
             init(args)
-        elif "destroy" in args:
-            destroy(args, config, orch)
-        elif "create" in args:
-            create(args, cur_dir, config, orch)
-        elif "sync" in args:
-            nacl.utils.copy_srv_dir(
-                config["running_tmp_dir"], config["formula"], cur_dir
-            )
-        elif "converge" in args:
-            converge(args, cur_dir, config, orch)
-        elif "prepare" in args:
-            prepare(args, cur_dir, config, orch)
-        elif "login" in args:
-            login(args, config, orch)
-        elif "verify" in args:
-            verify(args, config, orch)
         else:
-            parser.print_help()
+            if "lint" in args:
+                lint()
+                sys.exit(0)
+            elif "test" in args:
+                test(args, cur_dir)
+                sys.exit(0)
+            elif "scenario" not in args:
+                parser.print_help()
+                sys.exit(0)
+            else:
+                config = nacl.config.parse_config(nacl.config.get_config(args.scenario))
+                orch = get_orchestrator(config["provider"]["name"], config)
+            if "destroy" in args:
+                destroy(args, config, orch)
+            elif "create" in args:
+                create(args, cur_dir, config, orch)
+            elif "sync" in args:
+                nacl.utils.copy_srv_dir(
+                    config["running_tmp_dir"], config["formula"], cur_dir
+                )
+            elif "converge" in args:
+                converge(args, cur_dir, config, orch)
+            elif "prepare" in args:
+                prepare(args, cur_dir, config, orch)
+            elif "login" in args:
+                login(args, config, orch)
+            elif "verify" in args:
+                verify(args, config, orch)
+            else:
+                parser.print_help()
     except (
         nacl.exceptions.ConfigFileNotFound,
         nacl.exceptions.ScenarioExists,

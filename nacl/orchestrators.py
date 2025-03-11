@@ -136,6 +136,12 @@ class Vagrant(Orchestrator):
                 ssh_config_file.write(ssh_config_full)
 
     def login(self, host: str) -> None:
+        if host == "":
+            inv = self.get_inventory()
+            if len(inv) > 1:
+                print("More than one host exists in scenarios, please specify with --host which one you wish to connect to")
+                return
+            host = inv[0].split("_")[-1]
         subprocess.run(
             f"vagrant ssh nacl_{self.config['formula']}_{self.config['scenario']}_{host}",
             shell=True,

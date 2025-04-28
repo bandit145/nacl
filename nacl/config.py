@@ -19,7 +19,7 @@ SCHEMA = {
     "phases": {"required": False, "type": list},
     "extra_file_roots": {"required": False, "type": list},
     "master_config": {"required": True, "type": dict},
-    "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh"]},
+    "salt_exec_mode": {"required": True, "type": str, "options": ["salt-ssh", "salt-master"]},
 }
 
 

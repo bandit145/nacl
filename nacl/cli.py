@@ -59,6 +59,8 @@ def prepare(
     for instance in config["instances"]:
         if instance['prov_name'] in prepared_instances:
             print(f"==> instance {instance['prov_name'].split('_')[-1]} already prepared")
+        elif not os.path.exists(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/prepare.sls"):
+            pass
         else:
             print(f"==> Preparing instances on {instance['prov_name'].split('_')[-1]}")
             if config["salt_exec_mode"] == "salt-ssh":
@@ -73,6 +75,12 @@ def prepare(
                 if proc.returncode == 0:
                     prepared = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.prepared")
                     prepared.touch()
+            elif config["salt_exec_mode"] == "salt-master":
+                proc = orch.exec(f"nacl_{config['formula']}_{config['scenario']}_master", f"salt '{instance['prov_name'].split('_')[-1]}' state.apply {config['formula']}/nacl/{config['scenario']}/prepare.sls")
+                if proc.returncode == 0:
+                    prepared = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.prepared")
+                    prepared.touch()
+
 
 
 def converge(
@@ -102,6 +110,12 @@ def converge(
                 output = proc.stdout.decode()
                 print(output)
                 instance_output[instance["prov_name"].split("_")[-1]] = output
+            if config["salt_exec_mode"] == "salt-master":
+                proc = orch.exec(f"nacl_{config['formula']}_{config['scenario']}_master", f"salt {instance['prov_name'].split('_')[-1]} state.apply {config['formula']}")
+                if proc.returncode == 0:
+                    converged = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.converged")
+                    converged.touch()
+ 
     return instance_output
 
 
@@ -149,6 +163,10 @@ def login(
 ) -> None:
     orch.login(args.host)
 
+def list_command(args: argparse.Namespace, config: dict, orch: nacl.orchestrators.Orchestrator) -> None:
+    print("Name","\t","State")
+    for instance in orch.get_inventory():
+        print(instance[0].split("_")[-1],instance[1])
 
 def lint() -> None:
     print("> Linting")
@@ -216,7 +234,7 @@ def parse_args() -> Tuple[argparse.Namespace, argparse.ArgumentParser]:
     converge_parser.add_argument("--converge", help=argparse.SUPPRESS)
     converge_parser.add_argument(
         "--scenario",
-        help="scenario to use fir converge. Default is default",
+        help="scenario to use for converge. Default is default",
         default="default",
     )
     # login parser
@@ -295,6 +313,13 @@ def parse_args() -> Tuple[argparse.Namespace, argparse.ArgumentParser]:
         help="Scenario to verify. Default is default",
         default="default",
     )
+    list_parser = subparsers.add_parser("list")
+    list_parser.add_argument("--list", help=argparse.SUPPRESS)
+    list_parser.add_argument(
+        "--scenario",
+        help="scenario to use for converge. Default is default",
+        default="default",
+    )
 
     # init
     init_parser = subparsers.add_parser("init")
@@ -355,6 +380,8 @@ def run() -> None:
                 orch = get_orchestrator(config["provider"]["name"], config)
             if "destroy" in args:
                 destroy(args, config, orch)
+            elif "list" in args:
+                list_command(args, config, orch)
             elif "create" in args:
                 create(args, cur_dir, config, orch)
             elif "sync" in args:
@@ -362,6 +389,7 @@ def run() -> None:
                     config["running_tmp_dir"], config["formula"], cur_dir
                 )
             elif "converge" in args:
+                create(args, cur_dir, config, orch)
                 converge(args, cur_dir, config, orch)
             elif "prepare" in args:
                 prepare(args, cur_dir, config, orch)

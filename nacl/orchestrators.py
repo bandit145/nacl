@@ -5,6 +5,7 @@ import sys
 import shutil
 import yaml
 import json
+import time
 import re
 from abc import ABC, abstractmethod
 from jinja2 import Environment, BaseLoader, select_autoescape
@@ -35,6 +36,7 @@ class Docker(Orchestrator):
     __conf_schema__ = {
         "image": {"type": str, "required": True},
         "docker_options": {"type": dict, "required": False},
+        "converge": {"type": bool, "required": False}
     }
 
     def __init__(self, config: dict) -> None:
@@ -48,18 +50,22 @@ class Docker(Orchestrator):
         inventory = []
         for instance in self.config["instances"]:
             cont = self.client.containers.list(filters={"name":instance["prov_name"]})
+            cont += self.client.containers.list(filters={"name":instance["prov_name"], "status": "exited"})
             if cont == []:
                 status = "Not created"
             elif os.path.exists(f"{self.config['running_tmp_dir']}/{self.config['provider']['name']}/{self.config['formula']}/{self.config['scenario']}/{instance['prov_name']}.prepared"):
                 status = "Prepared"
             else:
-                status = "Created"
+                if cont[0].status == "running":
+                    status = "Created"
+                else:
+                    status = "Created (not running)"
             inventory.append((instance["prov_name"].split("_")[-1], status))
 
         return inventory
 
     def exec(self, name: str, cmd: str) -> subprocess.CompletedProcess:
-        proc = subprocess.run(f"docker exec -it {name} {cmd}", shell=True)
+        proc = subprocess.run(f"docker exec -it {name} {cmd}", shell=True, capture_output=True)
         return proc
 
     def orchestrate(self) -> None:
@@ -70,24 +76,29 @@ class Docker(Orchestrator):
             net = self.client.networks.create(f"nacl_{self.config['formula']}_{self.config['scenario']}")
         else:
             net = nets[0]
-        master_config = {"pillar_roots": {"base": [f"/srv/salt/formulas/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"]}, "file_roots": {"base": ["/srv/salt/formulas/{self.config['formula']}/nacl/{self.config['scenario']}/saltfs", "/srv/salt/formulas"]}, "auto_accept": True}
-        master_config.update(self.config.get('master_config', {}))
-        with open(f"{self.scenario_dir}/master", "w") as f:
-            json.dump(master_config, f)
-        master_container_options = {"tty": True, "tmpfs": {"/tmp":"", "/run": ""}, "volumes": [f"{self.formula_dir}:/srv/salt/formulas", f"{self.scenario_dir}:/srv/salt/data", f"{self.scenario_dir}/master:/etc/salt/master"], "name": f"nacl_{self.config['formula']}_{self.config['scenario']}_master", "labels": {"app": "nacl", "scenario": self.config["scenario"], "formula": self.config["formula"]}, "detach": True, "hostname": "master", "image": "salt:3006"}
-        master_container_options.update(self.config.get("master_container_options", {}))
-        master_container = self.client.containers.run(**master_container_options)
-        while self.exec(f"nacl_{self.config['formula']}_{self.config['scenario']}_master", "salt '*' test.version").returncode != 0:
-            time.sleep(1)
-        net.connect(master_container, aliases=["master"])
+        if self.client.containers.list(filters={"name": f"nacl_{self.config['formula']}_{self.config['scenario']}_master"}) == []:
+            master_config = {"pillar_roots": {"base": [f"/srv/salt/formulas/{self.config['formula']}/nacl/{self.config['scenario']}/pillar"]}, "file_roots": {"base": ["/srv/salt/formulas/{self.config['formula']}/nacl/{self.config['scenario']}/saltfs", "/srv/salt/formulas"]}, "auto_accept": True}
+            master_config.update(self.config.get('master_config', {}))
+            with open(f"{self.scenario_dir}/master", "w") as f:
+                json.dump(master_config, f)
+            master_container_options = {"tty": True, "tmpfs": {"/tmp":"", "/run": ""}, "volumes": [f"{self.formula_dir}:/srv/salt/formulas", f"{self.scenario_dir}:/srv/salt/data", f"{self.scenario_dir}/master:/etc/salt/master"], "name": f"nacl_{self.config['formula']}_{self.config['scenario']}_master", "labels": {"app": "nacl", "scenario": self.config["scenario"], "formula": self.config["formula"]}, "detach": True, "hostname": "master", "image": "salt:3006"}
+            master_container_options.update(self.config.get("master_container_options", {}))
+            master_container = self.client.containers.run(**master_container_options)
+            while b"ERROR" in self.exec(f"nacl_{self.config['formula']}_{self.config['scenario']}_master", "salt-run fileserver.dir_list").stdout:
+                time.sleep(1)
+            net.connect(master_container, aliases=["master"])
         for instance in self.config["instances"]:
-            minion_config = {"master": "master"}
-            instance_container_options = {"tty": True, "tmpfs": {"/tmp":"", "/run": ""}, "volumes": [f"{self.scenario_dir}/{instance['prov_name']}_minion:/etc/salt/minion:z"], "name": instance["prov_name"], "labels": {"app": "nacl", "scenario": self.config["scenario"], "formula": self.config["formula"]}, "detach": True, "hostname": instance["prov_name"].split("_")[-1], "image": instance["image"]}
-            instance_container_options.update(instance.get("docker_options", {}))
-            with open(f"{self.scenario_dir}/{instance['prov_name']}_minion", "w") as f:
-                json.dump(minion_config, f)
-            cont = self.client.containers.run(**instance_container_options)
-            net.connect(cont, aliases=[instance["prov_name"].split("_")[-1]])
+            if self.client.containers.list(filters={"name":instance['prov_name']}) == []:
+                minion_config = {"master": "master"}
+                instance_container_options = {"tty": True, "tmpfs": {"/tmp":"", "/run": ""}, "volumes": [f"{self.scenario_dir}/{instance['prov_name']}_minion:/etc/salt/minion:z"], "name": instance["prov_name"], "labels": {"app": "nacl", "scenario": self.config["scenario"], "formula": self.config["formula"]}, "detach": True, "hostname": instance["prov_name"].split("_")[-1], "image": instance["image"]}
+                instance_container_options.update(instance.get("docker_options", {}))
+                with open(f"{self.scenario_dir}/{instance['prov_name']}_minion", "w") as f:
+                    json.dump(minion_config, f)
+                cont = self.client.containers.run(**instance_container_options)
+                net.connect(cont, aliases=[instance["prov_name"].split("_")[-1]])
+                while instance_container_options["hostname"] not in json.loads(self.exec(master_container.name, "salt-key list --out=json").stdout)["minions"]:
+                    print(f"==> Waiting for {instance['prov_name'].split('_')[-1]} to come up...")
+                    time.sleep(1)
 
 
     def login(self, host: str) -> None:
@@ -98,12 +109,16 @@ class Docker(Orchestrator):
                 return
             host = inv[0]
         subprocess.run(
-            f"docker exec -it {host} /bin/bash",
+            f"docker exec -it nacl_{self.config['formula']}_{self.config['scenario']}_{host} /bin/bash",
             shell=True,
         )
 
     def cleanup(self) -> None:
-        for instance in self.client.containers.list(filters={"label": ["app=nacl", f"formula={self.config['formula']}", f"scenario={self.config['scenario']}"]}):
+        existing_containers = self.client.containers.list(filters={"label": ["app=nacl", f"formula={self.config['formula']}", f"scenario={self.config['scenario']}"]})
+        existing_containers += self.client.containers.list(filters={"label": ["app=nacl", f"formula={self.config['formula']}", f"scenario={self.config['scenario']}"], "status": "exited"})
+
+        for instance in existing_containers:
+            print(f"==> Removing instance {instance.name.split('_')[-1]}")
             instance.remove(force=True)
         nets = self.client.networks.list(names=[f"nacl_{self.config['formula']}_{self.config['scenario']}"])  
         if nets != []:

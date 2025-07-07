@@ -36,7 +36,6 @@ def create(
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
     orch.orchestrate()
-    prepare(args, cur_dir, config, orch)
 
 def prepare(
     args: argparse.Namespace,
@@ -45,11 +44,14 @@ def prepare(
     orch: nacl.orchestrators.Orchestrator,
 ) -> dict[str, str]:
     scenario_dir = f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/nacl/"
-    if orch.get_inventory() == []:
+    current_inv = [x for x in orch.get_inventory() if x[1] != "Not created"]
+    if current_inv == []:
+        create(args, cur_dir, config, orch)
         nacl.utils.copy_srv_dir(config["running_tmp_dir"], config["formula"], cur_dir)
     if not "nacl.yml" in os.listdir():
         os.chdir(f"nacl/{config['scenario']}")
-    if orch.get_inventory() == []:
+    cwd = os.getcwd()
+    if current_inv == []:
         orch.orchestrate()
     instance_output: dict[str, str] = {}
     prepared_instances = []
@@ -59,7 +61,7 @@ def prepare(
     for instance in config["instances"]:
         if instance['prov_name'] in prepared_instances:
             print(f"==> instance {instance['prov_name'].split('_')[-1]} already prepared")
-        elif not os.path.exists(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/prepare.sls"):
+        elif not os.path.exists(f"{cwd}/prepare.sls"):
             pass
         else:
             print(f"==> Preparing instances on {instance['prov_name'].split('_')[-1]}")
@@ -76,12 +78,12 @@ def prepare(
                     prepared = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.prepared")
                     prepared.touch()
             elif config["salt_exec_mode"] == "salt-master":
-                proc = orch.exec(f"nacl_{config['formula']}_{config['scenario']}_master", f"salt '{instance['prov_name'].split('_')[-1]}' state.apply {config['formula']}/nacl/{config['scenario']}/prepare.sls")
+                proc = orch.exec(f"nacl_{config['formula']}_{config['scenario']}_master", f"salt '{instance['prov_name'].split('_')[-1]}' state.apply {config['formula']}/nacl/{config['scenario']}/prepare")
+                output = proc.stdout.decode()
+                print(output)
                 if proc.returncode == 0:
                     prepared = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.prepared")
                     prepared.touch()
-
-
 
 def converge(
     args: argparse.Namespace,
@@ -112,9 +114,9 @@ def converge(
                 instance_output[instance["prov_name"].split("_")[-1]] = output
             if config["salt_exec_mode"] == "salt-master":
                 proc = orch.exec(f"nacl_{config['formula']}_{config['scenario']}_master", f"salt {instance['prov_name'].split('_')[-1]} state.apply {config['formula']}")
-                if proc.returncode == 0:
-                    converged = pathlib.Path(f"{config['running_tmp_dir']}/{config['provider']['name']}/{config['formula']}/{config['scenario']}/{instance['prov_name']}.converged")
-                    converged.touch()
+                output = proc.stdout.decode()
+                print(output)
+                instance_output[instance["prov_name"].split("_")[-1]] = output
  
     return instance_output
 
@@ -203,6 +205,8 @@ def test(args: argparse.Namespace, cur_dir: str) -> None:
             for phase in phases:
                 if phase == "create":
                     create(args, cur_dir, config, orch)
+                elif phase == "prepare":
+                    prepare(ars, cur_dir, config, orch)
                 elif phase == "converge":
                     for k, v in converge(args, cur_dir, config, orch).items():
                         if re.findall(r"Failed:\s+0", v) == []:

@@ -88,8 +88,13 @@ class Docker(Orchestrator):
                 time.sleep(1)
             net.connect(master_container, aliases=["master"])
         for instance in self.config["instances"]:
+            short_name = instance['prov_name'].split("_")[-1]
             if self.client.containers.list(filters={"name":instance['prov_name']}) == []:
-                minion_config = {"master": "master"}
+                if short_name in self.config["grains"]:
+                    grains = self.config["grains"][short_name]
+                else:
+                    grains = {}
+                minion_config = {"master": "master", "grains": grains}
                 instance_container_options = {"tty": True, "tmpfs": {"/tmp":"", "/run": ""}, "volumes": [f"{self.scenario_dir}/{instance['prov_name']}_minion:/etc/salt/minion:z"], "name": instance["prov_name"], "labels": {"app": "nacl", "scenario": self.config["scenario"], "formula": self.config["formula"]}, "detach": True, "hostname": instance["prov_name"].split("_")[-1], "image": instance["image"]}
                 instance_container_options.update(instance.get("docker_options", {}))
                 with open(f"{self.scenario_dir}/{instance['prov_name']}_minion", "w") as f:

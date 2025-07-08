@@ -19,11 +19,17 @@ class Testinfra(Verifier):
         self, config: dict, orchestrator: nacl.orchestrators.Orchestrator
     ) -> None:
         super().__init__(config, orchestrator)
-        self.inventory = [f"ssh://{x}" for x in orchestrator.get_inventory()]
+        match orchestrator:
+            case nacl.orchestrators.Vagrant():
+                self.inventory = [f"ssh://{x[0]}" for x in orchestrator.get_inventory()]
+                self.extra_options = "--ssh-config={self.scenario_dir}/ssh_config"
+            case nacl.orchestrators.Docker():
+                self.inventory = [f"docker://nacl_{self.config['formula']}_{self.config['scenario']}_{x[0]}" for x in orchestrator.get_inventory()]
+                self.extra_options = ""
 
     def run(self) -> None:
         proc = subprocess.run(
-            f'python -m pytest --ssh-config={self.scenario_dir}/ssh_config --hosts={",".join(self.inventory)} tests/',
+            f'python -m pytest {self.extra_options} --hosts={",".join(self.inventory)} tests/',
             shell=True,
             cwd=f"{self.config['running_tmp_dir']}/formulas/{self.config['formula']}/nacl/{self.config['scenario']}",
         )

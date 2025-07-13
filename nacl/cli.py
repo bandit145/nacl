@@ -109,7 +109,7 @@ def converge(
                     shell=True,
                     capture_output=True,
                 )
-                output = proc.stdout.decode()
+                output = proc.stdout.decode() + proc.stderr.decode()
                 print(output)
                 instance_output[instance["prov_name"].split("_")[-1]] = output
             if config["salt_exec_mode"] == "salt-master":

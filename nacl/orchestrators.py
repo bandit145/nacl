@@ -183,10 +183,10 @@ class Vagrant(Orchestrator):
                 inventory.append((instance["prov_name"].split("_")[-1], "Not created"))
         else:
             for instance in self.vagrant.status():
-                if os.path.exists(f"{self.config['running_tmp_dir']}/{self.config['provider']['name']}/{self.config['formula']}/{self.config['scenario']}/{instance['prov_name']}.prepared"):
+                if os.path.exists(f"{self.config['running_tmp_dir']}/{self.config['provider']['name']}/{self.config['formula']}/{self.config['scenario']}/{instance.name}.prepared"):
                     status = "Prepared"
                 else:
-                    status = x.state
+                    status = instance.state
                 inventory.append((instance.name.split("_")[-1], status))
 
         return inventory
